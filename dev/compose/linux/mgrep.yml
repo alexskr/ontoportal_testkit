@@ -1,0 +1,18 @@
+services:
+  test-linux:
+    environment:
+      MGREP_HOST: mgrep-ut
+      MGREP_PORT: 55556
+    depends_on:
+      mgrep-ut:
+        condition: service_healthy
+
+  mgrep-ut:
+    image: ontoportal/mgrep:0.0.3
+    platform: linux/amd64
+    healthcheck:
+      test: ["CMD", "nc", "-z", "-v", "127.0.0.1", "55556"]
+      start_period: 3s
+      interval: 10s
+      timeout: 5s
+      retries: 5

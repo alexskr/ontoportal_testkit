@@ -1,0 +1,9 @@
+project_name: ncbo_annotator
+app_service: test-linux
+backends:
+  - fs
+  - ag
+  - vo
+  - gd
+optional_services:
+  - mgrep
