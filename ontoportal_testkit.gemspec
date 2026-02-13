@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
   spec.files = Dir[
     "README.md",
     "Rakefile",
-    ".ontoportal-test.example.yml",
+    ".ontoportal-testkit.example.yml",
     "Dockerfile",
     "docker/**/*",
     "lib/**/*.rb",

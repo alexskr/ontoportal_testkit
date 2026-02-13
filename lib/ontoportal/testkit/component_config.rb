@@ -3,7 +3,7 @@ require "yaml"
 module Ontoportal
   module Testkit
     class ComponentConfig
-      DEFAULT_PATH = ".ontoportal-test.yml".freeze
+      DEFAULT_PATH = ".ontoportal-testkit.yml".freeze
 
       attr_reader :path, :raw
 

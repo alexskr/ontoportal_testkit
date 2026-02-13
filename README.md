@@ -8,14 +8,14 @@ This toolkit is intended to reduce copy/paste across related repos by packaging 
 
 - Reusable `rake test:docker:*` task logic
 - Shared backend profile conventions (`fs`, `ag`, `vo`, `gd`)
-- Per-component overrides via `.ontoportal-test.yml`
+- Per-component overrides via `.ontoportal-testkit.yml`
 
 ## Planned Usage
 
 In consumer components (`goo`, `ontologies_linked_data`, `ncbo_annotator`, `ncbo_recommender`, `ncbo_cron`, `ontologies_api`):
 
 1. Add this gem as a development dependency in `Gemfile`.
-2. Add a small `.ontoportal-test.yml` manifest (for component-specific services/config).
+2. Add a small `.ontoportal-testkit.yml` manifest (for component-specific services/config).
 3. Require the task loader from the component `Rakefile`:
 
 ```ruby
@@ -24,7 +24,7 @@ require "ontoportal/testkit/tasks"
 
 Requiring `ontoportal/testkit/tasks` loads all `ontoportal_testkit` rake tasks from this gem (`rakelib/*.rake`) into the consumer component.
 The docker tasks use the compose files packaged inside this gem (`docker/compose/base.yml` and `docker/compose/**/*.yml`), not compose files from the consumer repo.
-Compose commands use component name from `.ontoportal-test.yml` (`component_name`) via `docker compose -p`, so container/network names reflect the consumer component.
+Compose commands use component name from `.ontoportal-testkit.yml` (`component_name`) via `docker compose -p`, so container/network names reflect the consumer component.
 For backend-scoped runs, compose scope names are suffixed per backend (and `-linux` for Linux container runs) so different backend runs can execute in parallel without collisions.
 
 This is intentionally a practical first step. It does not yet attempt to fully centralize all CI behavior for all components.
@@ -34,7 +34,7 @@ This is intentionally a practical first step. It does not yet attempt to fully c
 Component-specific dependency services (for example `mgrep`) are configured independently from triplestore backend selection.
 
 - Backend remains one of: `fs`, `ag`, `vo`, `gd`
-- Dependency services are listed in `.ontoportal-test.yml` under `dependency_services`
+- Dependency services are listed in `.ontoportal-testkit.yml` under `dependency_services`
 - Service override files are loaded from `docker/compose/services/<service>.yml`
 
 ## Base Image
