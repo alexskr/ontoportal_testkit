@@ -10,6 +10,8 @@ services:
   mgrep-ut:
     image: ontoportal/mgrep:0.0.3
     platform: linux/amd64
+    ports:
+      - 55556:55556
     healthcheck:
       test: ["CMD", "nc", "-z", "-v", "127.0.0.1", "55556"]
       start_period: 3s

@@ -9,6 +9,8 @@ services:
     environment:
       COVERAGE: 'true' # enable simplecov code coverage
       REDIS_HOST: redis-ut
+      MGREP_HOST: mgrep-ut
+      MGREP_PORT: 55556
       SOLR_TERM_SEARCH_URL: http://solr-ut:8983/solr
       SOLR_PROP_SEARCH_URL: http://solr-ut:8983/solr
     depends_on:
@@ -16,6 +18,8 @@ services:
         condition: service_healthy
       redis-ut:
         condition: service_healthy
+          #      mgrep-ut:
+          #condition: service_healthy
     profiles:
       - linux
 
@@ -41,6 +45,19 @@ services:
        interval: 10s
        timeout: 5s
        retries: 5
+
+  # mgrep-ut:
+  #   image: ontoportal/mgrep:0.0.3
+  #   platform: linux/amd64
+  #   healthcheck:
+  #     test: ["CMD", "nc", "-z", "-v", "127.0.0.1", "55556"]
+  #     start_period: 3s
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   profiles:
+  #     - mgrep
+
 
   4store-ut:
     image: bde2020/4store

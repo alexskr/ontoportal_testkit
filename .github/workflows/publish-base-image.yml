@@ -53,6 +53,7 @@ jobs:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=tag
+            type=raw,value=${{ github.ref_name }}-ruby${{ env.RUBY_VERSION }}-${{ env.DISTRO }},enable=${{ github.event_name == 'release' }}
             type=raw,value=ruby${{ env.RUBY_VERSION }}-${{ env.DISTRO }}
             type=raw,value=sha-${{ github.sha }}
             type=raw,value=latest,enable=${{ env.RUBY_VERSION == '3.2' && env.DISTRO == 'bullseye' }}
@@ -66,6 +67,6 @@ jobs:
             RUBY_VERSION=${{ env.RUBY_VERSION }}
             DISTRO=${{ env.DISTRO }}
           push: ${{ env.SHOULD_PUSH == 'true' }}
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64/v8
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

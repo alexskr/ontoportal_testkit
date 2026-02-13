@@ -2,7 +2,7 @@ require "yaml"
 
 module Ontoportal
   module Testkit
-    class ProjectConfig
+    class ComponentConfig
       DEFAULT_PATH = ".ontoportal-test.yml".freeze
 
       attr_reader :path, :raw
@@ -12,8 +12,8 @@ module Ontoportal
         @raw = File.exist?(path) ? (YAML.load_file(path) || {}) : {}
       end
 
-      def project_name
-        raw.fetch("project_name", "unknown")
+      def component_name
+        raw.fetch("component_name", File.basename(Dir.pwd))
       end
 
       def app_service
@@ -24,8 +24,8 @@ module Ontoportal
         Array(raw.fetch("backends", %w[fs ag vo gd]))
       end
 
-      def optional_services
-        Array(raw.fetch("optional_services", []))
+      def dependency_services
+        Array(raw.fetch("dependency_services", []))
       end
     end
   end

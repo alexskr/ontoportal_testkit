@@ -18,5 +18,3 @@ WORKDIR /app
 
 RUN gem update --system
 RUN bundle config set --global no-document 'true'
-
-CMD ["bundle", "exec", "rake"]

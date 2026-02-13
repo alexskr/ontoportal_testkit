@@ -31,4 +31,4 @@ jobs:
             RUBY_VERSION=3.2
             DISTRO=bullseye
           push: false
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64/v8

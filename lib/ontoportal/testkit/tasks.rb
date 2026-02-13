@@ -7,9 +7,10 @@ module Ontoportal
       return if defined?(@tasks_loaded) && @tasks_loaded
 
       Dir[File.join(root, "rakelib", "*.rake")].sort.each do |task_file|
-        load task_file
+        Rake.application.add_import(task_file)
       end
 
+      Rake.application.load_imports
       @tasks_loaded = true
     end
   end
@@ -19,13 +20,13 @@ Ontoportal::Testkit.load_tasks!
 
 namespace :test do
   namespace :testkit do
-    desc "Show loaded testkit project config"
+    desc "Show loaded testkit component config"
     task :config do
-      cfg = Ontoportal::Testkit::ProjectConfig.new
-      puts "project_name: #{cfg.project_name}"
+      cfg = Ontoportal::Testkit::ComponentConfig.new
+      puts "component_name: #{cfg.component_name}"
       puts "app_service: #{cfg.app_service}"
       puts "backends: #{cfg.backends.join(', ')}"
-      puts "optional_services: #{cfg.optional_services.join(', ')}"
+      puts "dependency_services: #{cfg.dependency_services.join(', ')}"
     end
   end
 end
