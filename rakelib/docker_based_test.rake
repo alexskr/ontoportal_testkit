@@ -86,7 +86,7 @@ namespace :test do
       Array(profiles).map { |profile| "--profile #{profile}" }.join(' ')
     end
 
-    def compose_project_name(key: nil, linux: false)
+    def compose_scope_name(key: nil, linux: false)
       name = component_config.component_name.to_s.strip
       name = File.basename(Dir.pwd) if name.empty?
 
@@ -96,8 +96,9 @@ namespace :test do
       normalized
     end
 
-    def compose_base(files, compose_project:)
-      "docker compose -p #{compose_project} #{compose_files(files)}"
+    def compose_base(files, compose_scope:)
+      component_dir = Shellwords.escape(Dir.pwd)
+      "docker compose --project-directory #{component_dir} -p #{compose_scope} #{compose_files(files)}"
     end
 
     def backend_override_for(key)
@@ -149,14 +150,14 @@ namespace :test do
       profiles.uniq
     end
 
-    def compose_up(files:, profiles:, compose_project:)
-      shell!("#{compose_base(files, compose_project: compose_project)} #{profile_flags(profiles)} up -d --wait --wait-timeout #{TIMEOUT}")
+    def compose_up(files:, profiles:, compose_scope:)
+      shell!("#{compose_base(files, compose_scope: compose_scope)} #{profile_flags(profiles)} up -d --wait --wait-timeout #{TIMEOUT}")
     end
 
-    def compose_down(files:, profiles: [], compose_project:)
+    def compose_down(files:, profiles: [], compose_scope:)
       return puts('OP_KEEP_CONTAINERS=1 set, skipping docker compose down') if ENV['OP_KEEP_CONTAINERS'] == '1'
 
-      cmd = [compose_base(files, compose_project: compose_project), profile_flags(profiles), "down"].reject(&:empty?).join(' ')
+      cmd = [compose_base(files, compose_scope: compose_scope), profile_flags(profiles), "down"].reject(&:empty?).join(' ')
       shell!(cmd)
     end
 
@@ -168,9 +169,9 @@ namespace :test do
       apply_host_env(key)
       files = compose_files_for(key, linux: false)
       profiles = selected_profiles(key, linux: false)
-      compose_project = compose_project_name(key: key, linux: false)
+      compose_scope = compose_scope_name(key: key, linux: false)
 
-      compose_up(files: files, profiles: profiles, compose_project: compose_project)
+      compose_up(files: files, profiles: profiles, compose_scope: compose_scope)
       Rake::Task['test'].invoke
     end
 
@@ -181,11 +182,11 @@ namespace :test do
 
       files = compose_files_for(key, linux: true)
       profiles = selected_profiles(key, linux: true)
-      compose_project = compose_project_name(key: key, linux: true)
-      compose_up(files: files, profiles: profiles, compose_project: compose_project)
+      compose_scope = compose_scope_name(key: key, linux: true)
+      compose_up(files: files, profiles: profiles, compose_scope: compose_scope)
 
       shell!(
-        "#{compose_base(files, compose_project: compose_project)} #{profile_flags(profiles)} " \
+        "#{compose_base(files, compose_scope: compose_scope)} #{profile_flags(profiles)} " \
         "run --rm --build #{app_service} bundle exec rake test #{linux_test_rake_args}"
       )
     end
@@ -212,11 +213,11 @@ namespace :test do
 
       files = compose_files_for(key, linux: true)
       profiles = selected_profiles(key, linux: true)
-      compose_project = compose_project_name(key: key, linux: true)
-      compose_up(files: files, profiles: profiles, compose_project: compose_project)
+      compose_scope = compose_scope_name(key: key, linux: true)
+      compose_up(files: files, profiles: profiles, compose_scope: compose_scope)
 
       shell!(
-        "#{compose_base(files, compose_project: compose_project)} #{profile_flags(profiles)} " \
+        "#{compose_base(files, compose_scope: compose_scope)} #{profile_flags(profiles)} " \
         "run --rm --build #{app_service} bash"
       )
     end
@@ -224,84 +225,84 @@ namespace :test do
     desc 'Run unit tests with AllegroGraph backend (docker deps, host Ruby)'
     task :ag do
       files = compose_files_for(:ag, linux: false)
-      compose_project = compose_project_name(key: :ag, linux: false)
+      compose_scope = compose_scope_name(key: :ag, linux: false)
       run_host_tests(:ag)
     ensure
       Rake::Task['test'].reenable
-      compose_down(files: files, profiles: selected_profiles(:ag, linux: false), compose_project: compose_project)
+      compose_down(files: files, profiles: selected_profiles(:ag, linux: false), compose_scope: compose_scope)
     end
 
     desc 'Run unit tests with AllegroGraph backend (docker deps, Linux container)'
     task 'ag:linux' do
       files = compose_files_for(:ag, linux: true)
-      compose_project = compose_project_name(key: :ag, linux: true)
+      compose_scope = compose_scope_name(key: :ag, linux: true)
       begin
         run_linux_tests(:ag)
       ensure
-        compose_down(files: files, profiles: selected_profiles(:ag, linux: true), compose_project: compose_project)
+        compose_down(files: files, profiles: selected_profiles(:ag, linux: true), compose_scope: compose_scope)
       end
     end
 
     desc 'Run unit tests with 4store backend (docker deps, host Ruby)'
     task :fs do
       files = compose_files_for(:fs, linux: false)
-      compose_project = compose_project_name(key: :fs, linux: false)
+      compose_scope = compose_scope_name(key: :fs, linux: false)
       run_host_tests(:fs)
     ensure
       Rake::Task['test'].reenable
-      compose_down(files: files, profiles: selected_profiles(:fs, linux: false), compose_project: compose_project)
+      compose_down(files: files, profiles: selected_profiles(:fs, linux: false), compose_scope: compose_scope)
     end
 
     desc 'Run unit tests with 4store backend (docker deps, Linux container)'
     task 'fs:linux' do
       files = compose_files_for(:fs, linux: true)
-      compose_project = compose_project_name(key: :fs, linux: true)
+      compose_scope = compose_scope_name(key: :fs, linux: true)
       begin
         run_linux_tests(:fs)
       ensure
-        compose_down(files: files, profiles: selected_profiles(:fs, linux: true), compose_project: compose_project)
+        compose_down(files: files, profiles: selected_profiles(:fs, linux: true), compose_scope: compose_scope)
       end
     end
 
     desc 'Run unit tests with Virtuoso backend (docker deps, host Ruby)'
     task :vo do
       files = compose_files_for(:vo, linux: false)
-      compose_project = compose_project_name(key: :vo, linux: false)
+      compose_scope = compose_scope_name(key: :vo, linux: false)
       run_host_tests(:vo)
     ensure
       Rake::Task['test'].reenable
-      compose_down(files: files, profiles: selected_profiles(:vo, linux: false), compose_project: compose_project)
+      compose_down(files: files, profiles: selected_profiles(:vo, linux: false), compose_scope: compose_scope)
     end
 
     desc 'Run unit tests with Virtuoso backend (docker deps, Linux container)'
     task 'vo:linux' do
       files = compose_files_for(:vo, linux: true)
-      compose_project = compose_project_name(key: :vo, linux: true)
+      compose_scope = compose_scope_name(key: :vo, linux: true)
       begin
         run_linux_tests(:vo)
       ensure
-        compose_down(files: files, profiles: selected_profiles(:vo, linux: true), compose_project: compose_project)
+        compose_down(files: files, profiles: selected_profiles(:vo, linux: true), compose_scope: compose_scope)
       end
     end
 
     desc 'Run unit tests with GraphDB backend (docker deps, host Ruby)'
     task :gd do
       files = compose_files_for(:gd, linux: false)
-      compose_project = compose_project_name(key: :gd, linux: false)
+      compose_scope = compose_scope_name(key: :gd, linux: false)
       run_host_tests(:gd)
     ensure
       Rake::Task['test'].reenable
-      compose_down(files: files, profiles: selected_profiles(:gd, linux: false), compose_project: compose_project)
+      compose_down(files: files, profiles: selected_profiles(:gd, linux: false), compose_scope: compose_scope)
     end
 
     desc 'Run unit tests with GraphDB backend (docker deps, Linux container)'
     task 'gd:linux' do
       files = compose_files_for(:gd, linux: true)
-      compose_project = compose_project_name(key: :gd, linux: true)
+      compose_scope = compose_scope_name(key: :gd, linux: true)
       begin
         run_linux_tests(:gd)
       ensure
-        compose_down(files: files, profiles: selected_profiles(:gd, linux: true), compose_project: compose_project)
+        compose_down(files: files, profiles: selected_profiles(:gd, linux: true), compose_scope: compose_scope)
       end
     end
 
@@ -337,11 +338,11 @@ namespace :test do
       key = (args[:backend] || DEFAULT_BACKEND).to_sym
       cfg!(key)
       files = compose_files_for(key, linux: true)
-      compose_project = compose_project_name(key: key, linux: true)
+      compose_scope = compose_scope_name(key: key, linux: true)
       begin
         run_linux_shell(key)
       ensure
-        compose_down(files: files, profiles: selected_profiles(key, linux: true), compose_project: compose_project)
+        compose_down(files: files, profiles: selected_profiles(key, linux: true), compose_scope: compose_scope)
       end
     end
 
@@ -349,11 +350,11 @@ namespace :test do
     task :up, [:backend] do |_t, args|
       key = (args[:backend] || DEFAULT_BACKEND).to_sym
       cfg!(key)
-      compose_project = compose_project_name(key: key, linux: false)
+      compose_scope = compose_scope_name(key: key, linux: false)
       compose_up(
         files: compose_files_for(key, linux: false),
         profiles: selected_profiles(key, linux: false),
-        compose_project: compose_project
+        compose_scope: compose_scope
       )
     end
 
@@ -362,7 +363,7 @@ namespace :test do
       compose_up(
         files: compose_files_for(nil, linux: false),
         profiles: all_backend_profiles(linux: false),
-        compose_project: compose_project_name(key: :all, linux: false)
+        compose_scope: compose_scope_name(key: :all, linux: false)
       )
     end
 
@@ -371,21 +372,21 @@ namespace :test do
       if args[:backend]
         if args[:backend].to_s == "all"
           compose_down(files: compose_files_for(nil, linux: false), profiles: all_backend_profiles(linux: false),
-                       compose_project: compose_project_name(key: :all, linux: false))
+                       compose_scope: compose_scope_name(key: :all, linux: false))
         else
           key = args[:backend].to_sym
           cfg!(key)
           compose_down(files: compose_files_for(key, linux: false), profiles: selected_profiles(key, linux: false),
-                       compose_project: compose_project_name(key: key, linux: false))
+                       compose_scope: compose_scope_name(key: key, linux: false))
           compose_down(files: compose_files_for(key, linux: true), profiles: selected_profiles(key, linux: true),
-                       compose_project: compose_project_name(key: key, linux: true))
+                       compose_scope: compose_scope_name(key: key, linux: true))
         end
       else
         BACKENDS.keys.each do |key|
           compose_down(files: compose_files_for(key, linux: false), profiles: selected_profiles(key, linux: false),
-                       compose_project: compose_project_name(key: key, linux: false))
+                       compose_scope: compose_scope_name(key: key, linux: false))
           compose_down(files: compose_files_for(key, linux: true), profiles: selected_profiles(key, linux: true),
-                       compose_project: compose_project_name(key: key, linux: true))
+                       compose_scope: compose_scope_name(key: key, linux: true))
         end
       end
     end

@@ -25,7 +25,7 @@ require "ontoportal/testkit/tasks"
 Requiring `ontoportal/testkit/tasks` loads all `ontoportal_testkit` rake tasks from this gem (`rakelib/*.rake`) into the consumer component.
 The docker tasks use the compose files packaged inside this gem (`docker/compose/base.yml` and `docker/compose/**/*.yml`), not compose files from the consumer repo.
 Compose commands use component name from `.ontoportal-test.yml` (`component_name`) via `docker compose -p`, so container/network names reflect the consumer component.
-For backend-scoped runs, compose project names are suffixed per backend (and `-linux` for Linux container runs) so different backend runs can execute in parallel without collisions.
+For backend-scoped runs, compose scope names are suffixed per backend (and `-linux` for Linux container runs) so different backend runs can execute in parallel without collisions.
 
 This is intentionally a practical first step. It does not yet attempt to fully centralize all CI behavior for all components.
 
