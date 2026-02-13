@@ -1,9 +1,8 @@
-component_name: ncbo_annotator
+component_name: your_component_name
 app_service: test-linux
 backends:
   - fs
   - ag
   - vo
   - gd
-dependency_services:
-  - mgrep
+dependency_services: []

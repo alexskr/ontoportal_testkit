@@ -1,4 +1,6 @@
-ARG TESTKIT_BASE_IMAGE=ontoportal/testkit-base:ruby3.2-bullseye
+ARG RUBY_VERSION=3.2
+ARG DISTRO=bullseye
+ARG TESTKIT_BASE_IMAGE=ontoportal/testkit-base:ruby${RUBY_VERSION}-${DISTRO}
 FROM ${TESTKIT_BASE_IMAGE}
 
 WORKDIR /app

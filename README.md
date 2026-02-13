@@ -15,12 +15,19 @@ This toolkit is intended to reduce copy/paste across related repos by packaging 
 In consumer components (`goo`, `ontologies_linked_data`, `ncbo_annotator`, `ncbo_recommender`, `ncbo_cron`, `ontologies_api`):
 
 1. Add this gem as a development dependency in `Gemfile`.
-2. Add a small `.ontoportal-testkit.yml` manifest (for component-specific services/config).
-3. Require the task loader from the component `Rakefile`:
+2. Require the task loader from the component `Rakefile`:
 
 ```ruby
 require "ontoportal/testkit/tasks"
 ```
+
+3. Initialize scaffold files in the component root:
+
+```bash
+bundle exec rake test:testkit:init
+```
+
+This creates `.ontoportal-testkit.yml` and `Dockerfile` if missing.
 
 Requiring `ontoportal/testkit/tasks` loads all `ontoportal_testkit` rake tasks from this gem (`rakelib/*.rake`) into the consumer component.
 The docker tasks use the compose files packaged inside this gem (`docker/compose/base.yml` and `docker/compose/**/*.yml`), not compose files from the consumer repo.
@@ -82,7 +89,9 @@ Required repository secrets:
 Consumer component `Dockerfile` pattern:
 
 ```dockerfile
-ARG TESTKIT_BASE_IMAGE=ontoportal/testkit-base:ruby3.2-bullseye
+ARG RUBY_VERSION=3.2
+ARG DISTRO=bullseye
+ARG TESTKIT_BASE_IMAGE=ontoportal/testkit-base:ruby${RUBY_VERSION}-${DISTRO}
 FROM ${TESTKIT_BASE_IMAGE}
 
 WORKDIR /app
