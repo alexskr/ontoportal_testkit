@@ -61,13 +61,20 @@ namespace :test do
                 uses: ruby/setup-ruby@v1
                 with:
                   ruby-version: .ruby-version
-                  bundler-cache: true
+
+              - name: Checkout ontoportal_testkit
+                uses: actions/checkout@v4
+                with:
+                  repository: alexskr/ontoportal_testkit
+                  path: .tooling/ontoportal_testkit
 
               - name: Run unit tests in linux container
                 env:
                   CI: "true"
                   TESTOPTS: "-v"
-                run: bundle exec rake test:docker:${{ matrix.backend }}:linux
+                  BACKEND: ${{ matrix.backend }}
+                run: |
+                  ruby -I .tooling/ontoportal_testkit/lib -e 'require "rake"; require "ontoportal/testkit/tasks"; Rake::Task["test:docker:#{ENV.fetch("BACKEND")}:linux"].invoke'
 
               - name: Upload coverage reports to Codecov
                 uses: codecov/codecov-action@v5
@@ -79,9 +86,9 @@ namespace :test do
       YAML
 
       dependency_services = ENV.fetch("DEPENDENCY_SERVICES", "")
-                               .split(",")
-                               .map(&:strip)
-                               .reject(&:empty?)
+        .split(",")
+        .map(&:strip)
+        .reject(&:empty?)
 
       config_content = <<~YAML
         component_name: #{component_name}
@@ -91,7 +98,7 @@ namespace :test do
           - ag
           - vo
           - gd
-        dependency_services: #{dependency_services.empty? ? "[]" : ""}
+        dependency_services: #{"[]" if dependency_services.empty?}
       YAML
 
       unless dependency_services.empty?
@@ -137,8 +144,8 @@ namespace :test do
         skipped << workflow_path
       end
 
-      puts "Written: #{written.join(', ')}" unless written.empty?
-      puts "Skipped (already exists): #{skipped.join(', ')}" unless skipped.empty?
+      puts "Written: #{written.join(", ")}" unless written.empty?
+      puts "Skipped (already exists): #{skipped.join(", ")}" unless skipped.empty?
       unless force
         puts "Use force overwrite (zsh-safe):"
         puts "  bundle exec rake 'test:testkit:init[force]'"

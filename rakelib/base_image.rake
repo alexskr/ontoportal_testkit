@@ -12,12 +12,12 @@ namespace :test do
         push = (args[:push] || ENV["TESTKIT_BASE_PUSH"] || "false") == "true"
         platforms = "linux/amd64,linux/arm64/v8"
         output = if push
-                   "--push"
-                 else
-                   archive = "tmp/testkit-base-ruby#{ruby_version}-#{distro}.oci.tar"
-                   FileUtils.mkdir_p("tmp")
-                   "--output type=oci,dest=#{archive}"
-                 end
+          "--push"
+        else
+          archive = "tmp/testkit-base-ruby#{ruby_version}-#{distro}.oci.tar"
+          FileUtils.mkdir_p("tmp")
+          "--output type=oci,dest=#{archive}"
+        end
 
         cmd = [
           "docker buildx build",
