@@ -1,4 +1,5 @@
 require "fileutils"
+require "erb"
 
 namespace :test do
   namespace :testkit do
@@ -6,8 +7,7 @@ namespace :test do
     task :init, [:force] do |_t, args|
       force_values = %w[1 true yes force]
       force_arg = args[:force].to_s.strip.downcase
-      force_env = ENV["FORCE"].to_s.strip.downcase
-      force = force_values.include?(force_arg) || force_values.include?(force_env)
+      force = force_values.include?(force_arg)
       component_name = (ENV["COMPONENT_NAME"] || File.basename(Dir.pwd)).to_s.strip
       app_service = (ENV["APP_SERVICE"] || "test-linux").to_s.strip
 
@@ -15,96 +15,21 @@ namespace :test do
       dockerfile_path = "Dockerfile"
       rake_loader_path = File.join("rakelib", "ontoportal_testkit.rake")
       workflow_path = File.join(".github", "workflows", "testkit-unit-tests.yml")
-      template_dockerfile = File.join(Ontoportal::Testkit.root, "Dockerfile")
-      rake_loader_content = <<~RUBY
-        # Loads shared OntoPortal testkit rake tasks into this component.
-        require "ontoportal/testkit/tasks"
-      RUBY
-      workflow_content = <<~'YAML'
-        name: Docker Unit Tests
-
-        on:
-          push:
-            branches:
-              - '**'
-            tags-ignore:
-              - '**'
-          pull_request:
-
-        jobs:
-          prepare:
-            runs-on: ubuntu-latest
-            outputs:
-              backends: ${{ steps.cfg.outputs.backends }}
-            steps:
-              - uses: actions/checkout@v4
-
-              - id: cfg
-                name: Read backend matrix from .ontoportal-testkit.yml
-                run: |
-                  BACKENDS=$(ruby -ryaml -rjson -e 'c=YAML.safe_load_file(".ontoportal-testkit.yml") || {}; b=c["backends"] || %w[fs ag vo gd]; puts JSON.generate(b)')
-                  echo "backends=$BACKENDS" >> "$GITHUB_OUTPUT"
-
-          test:
-            needs: prepare
-            runs-on: ubuntu-latest
-            timeout-minutes: 45
-            strategy:
-              fail-fast: false
-              matrix:
-                backend: ${{ fromJson(needs.prepare.outputs.backends) }}
-
-            steps:
-              - uses: actions/checkout@v4
-
-              - name: Set up Ruby from .ruby-version
-                uses: ruby/setup-ruby@v1
-                with:
-                  ruby-version: .ruby-version
-
-              - name: Checkout ontoportal_testkit
-                uses: actions/checkout@v4
-                with:
-                  repository: alexskr/ontoportal_testkit
-                  path: .tooling/ontoportal_testkit
-
-              - name: Run unit tests in linux container
-                env:
-                  CI: "true"
-                  TESTOPTS: "-v"
-                  BACKEND: ${{ matrix.backend }}
-                run: |
-                  ruby -I .tooling/ontoportal_testkit/lib -e 'require "rake"; require "ontoportal/testkit/tasks"; Rake::Task["test:docker:#{ENV.fetch("BACKEND")}:linux"].invoke'
-
-              - name: Upload coverage reports to Codecov
-                uses: codecov/codecov-action@v5
-                with:
-                  token: ${{ secrets.CODECOV_TOKEN }}
-                  flags: unittests,${{ matrix.backend }}
-                  verbose: true
-                  fail_ci_if_error: false
-      YAML
+      template_root = File.join(Ontoportal::Testkit.root, "templates", "init")
 
       dependency_services = ENV.fetch("DEPENDENCY_SERVICES", "")
         .split(",")
         .map(&:strip)
         .reject(&:empty?)
-
-      config_content = <<~YAML
-        component_name: #{component_name}
-        app_service: #{app_service}
-        backends:
-          - fs
-          - ag
-          - vo
-          - gd
-        dependency_services: #{"[]" if dependency_services.empty?}
-      YAML
-
-      unless dependency_services.empty?
-        config_content << dependency_services.map { |svc| "  - #{svc}" }.join("\n")
-        config_content << "\n"
-      end
+      config_content = render_template(
+        File.join(template_root, ".ontoportal-testkit.yml.erb"),
+        component_name: component_name,
+        app_service: app_service,
+        dependency_services: dependency_services
+      )
+      dockerfile_content = read_template(File.join(template_root, "Dockerfile"))
+      rake_loader_content = read_template(File.join(template_root, "rakelib", "ontoportal_testkit.rake"))
+      workflow_content = read_template(File.join(template_root, ".github", "workflows", "testkit-unit-tests.yml"))
 
       written = []
       skipped = []
@@ -119,8 +44,7 @@ namespace :test do
 
       should_write = force || !File.exist?(dockerfile_path) || confirm_overwrite(dockerfile_path)
       if should_write
-        abort("Missing Dockerfile template: #{template_dockerfile}") unless File.exist?(template_dockerfile)
-        File.write(dockerfile_path, File.read(template_dockerfile))
+        File.write(dockerfile_path, dockerfile_content)
         written << dockerfile_path
       else
         skipped << dockerfile_path
@@ -149,7 +73,6 @@ namespace :test do
       unless force
         puts "Use force overwrite (zsh-safe):"
         puts "  bundle exec rake 'test:testkit:init[force]'"
-        puts "  FORCE=1 bundle exec rake test:testkit:init"
       end
     end
   end
@@ -161,4 +84,14 @@ def confirm_overwrite(path)
   return false if answer.nil?
 
   %w[y yes].include?(answer.strip.downcase)
+end
+
+def read_template(template_path)
+  abort("Missing init template: #{template_path}") unless File.exist?(template_path)
+  File.read(template_path)
+end
+
+def render_template(template_path, vars = {})
+  template = read_template(template_path)
+  ERB.new(template, trim_mode: "-").result_with_hash(vars)
 end

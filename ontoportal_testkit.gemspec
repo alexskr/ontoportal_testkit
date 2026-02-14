@@ -16,7 +16,8 @@ Gem::Specification.new do |spec|
     "Dockerfile",
     "docker/**/*",
     "lib/**/*.rb",
-    "rakelib/**/*.rake"
+    "rakelib/**/*.rake",
+    "templates/**/*"
   ]
   spec.require_paths = ["lib"]
 

@@ -1,0 +1,15 @@
+component_name: <%= component_name %>
+app_service: <%= app_service %>
+backends:
+  - fs
+  - ag
+  - vo
+  - gd
+<% if dependency_services.empty? -%>
+dependency_services: []
+<% else -%>
+dependency_services:
+<% dependency_services.each do |service| -%>
+  - <%= service %>
+<% end -%>
+<% end -%>
