@@ -9,7 +9,7 @@ module Ontoportal
 
       def initialize(path = DEFAULT_PATH)
         @path = path
-        @raw = File.exist?(path) ? (YAML.load_file(path) || {}) : {}
+        @raw = File.exist?(path) ? load_yaml(path) : {}
       end
 
       def component_name
@@ -26,6 +26,16 @@ module Ontoportal
 
       def dependency_services
         Array(raw.fetch("dependency_services", []))
+      end
+
+      private
+
+      def load_yaml(path)
+        content = File.read(path)
+        parsed = YAML.safe_load(content, permitted_classes: [], permitted_symbols: [], aliases: false)
+        parsed.is_a?(Hash) ? parsed : {}
+      rescue Psych::Exception => e
+        raise ArgumentError, "Invalid YAML in #{path}: #{e.message}"
       end
     end
   end

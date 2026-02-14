@@ -144,10 +144,18 @@ namespace :test do
     end
 
     def all_backend_profiles(linux: false)
-      profiles = BACKENDS.keys.map(&:to_s)
+      profiles = configured_backends.map(&:to_s)
       profiles << "linux" if linux
       profiles.concat(dependency_services)
       profiles.uniq
+    end
+
+    def configured_backends
+      configured = component_config.backends.map { |b| b.to_s.strip.downcase.to_sym }.reject(&:empty?)
+      configured = BACKENDS.keys if configured.empty?
+      invalid = configured - BACKENDS.keys
+      abort_with("Unknown backends in .ontoportal-testkit.yml: #{invalid.join(', ')}. Supported: #{BACKENDS.keys.join(', ')}") unless invalid.empty?
+      configured
     end
 
     def compose_up(files:, profiles:, compose_scope:)
@@ -308,7 +316,7 @@ namespace :test do
 
     desc 'Run Linux-container unit tests against all backends in parallel'
     task 'all:linux' do
-      backends = BACKENDS.keys.map(&:to_s)
+      backends = configured_backends.map(&:to_s)
       children = {}
 
       backends.each do |backend|
@@ -382,7 +390,7 @@ namespace :test do
                        compose_scope: compose_scope_name(key: key, linux: true))
         end
       else
-        BACKENDS.keys.each do |key|
+        configured_backends.each do |key|
           compose_down(files: compose_files_for(key, linux: false), profiles: selected_profiles(key, linux: false),
                        compose_scope: compose_scope_name(key: key, linux: false))
           compose_down(files: compose_files_for(key, linux: true), profiles: selected_profiles(key, linux: true),

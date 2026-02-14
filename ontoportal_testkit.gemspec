@@ -3,9 +3,9 @@ require_relative "lib/ontoportal/testkit/version"
 Gem::Specification.new do |spec|
   spec.name = "ontoportal_testkit"
   spec.version = Ontoportal::Testkit::VERSION
-  spec.authors = ["NCBO"]
-  spec.summary = "Shared Docker-backed development tooling for OntoPortal components"
-  spec.description = "Reusable rake tasks and conventions for Docker-driven backend dependencies across related repos."
+  spec.authors = ["Alex Skrenchuk"]
+  spec.summary = "Shared Docker testkit and setup scaffolding for OntoPortal components"
+  spec.description = "Provides reusable rake tasks, compose conventions, and init scaffolding for Docker-driven backend dependencies and test execution across OntoPortal components."
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.1"
 
