@@ -21,7 +21,7 @@ In consumer components (`goo`, `ontologies_linked_data`, `ncbo_annotator`, `ncbo
 bundle exec rake test:testkit:init
 ```
 
-This creates `.ontoportal-testkit.yml`, `Dockerfile`, and `rakelib/ontoportal_testkit.rake` (task loader) if missing.
+This creates `.ontoportal-testkit.yml`, `Dockerfile`, `rakelib/ontoportal_testkit.rake` (task loader), and `.github/workflows/testkit-unit-tests.yml` if missing.
 If you do not want the `rakelib` loader file, you can instead add this in component `Rakefile`:
 
 ```ruby
