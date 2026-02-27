@@ -110,3 +110,22 @@ bundle exec rake test:docker:up:all
 bundle exec rake test:docker:all:linux
 bundle exec rake "test:docker:down[all]"
 ```
+
+### Faster Linux Docker test loop
+
+By default, `test:docker:*:linux` runs with `docker compose run --build`, which ensures a fresh image but adds rebuild overhead.
+You can enable a faster dev loop with mounted source and cached gems using dedicated dev aliases:
+
+```bash
+bundle exec rake test:docker:fs:linux:dev
+bundle exec rake test:docker:all:linux:dev
+bundle exec rake "test:docker:shell:dev[fs]"
+```
+
+Dev aliases enable `OPTK_TEST_DOCKER_LINUX_DEV_MODE=1`, which implies:
+
+- `OPTK_TEST_DOCKER_LINUX_BUILD=0` (skip `--build`)
+- `OPTK_TEST_DOCKER_LINUX_MOUNT_WORKDIR=1` (mount current repo at `/app`)
+- `OPTK_TEST_DOCKER_LINUX_BUNDLE_VOLUME=1` (named volume at `/usr/local/bundle`)
+
+You can also set these flags independently if you only want part of the behavior.

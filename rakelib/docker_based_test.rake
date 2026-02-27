@@ -16,8 +16,8 @@ namespace :test do
     SERVICE_OVERRIDE_DIR = File.join(COMPOSE_ROOT, "services") unless defined?(SERVICE_OVERRIDE_DIR)
     RUNTIME_OVERRIDE_DIR = File.join(COMPOSE_ROOT, "runtime") unless defined?(RUNTIME_OVERRIDE_DIR)
     LINUX_NO_PORTS_OVERRIDE = File.join(RUNTIME_OVERRIDE_DIR, "no-ports.yml") unless defined?(LINUX_NO_PORTS_OVERRIDE)
-    TIMEOUT = (ENV["OP_TEST_DOCKER_TIMEOUT"] || "600").to_i unless defined?(TIMEOUT)
-    DEFAULT_BACKEND = (ENV["OP_TEST_DOCKER_BACKEND"] || "fs").to_sym unless defined?(DEFAULT_BACKEND)
+    TIMEOUT = (ENV["OPTK_TEST_DOCKER_TIMEOUT"] || "600").to_i unless defined?(TIMEOUT)
+    DEFAULT_BACKEND = (ENV["OPTK_TEST_DOCKER_BACKEND"] || "fs").to_sym unless defined?(DEFAULT_BACKEND)
 
     unless defined?(BACKENDS)
       BACKENDS = {
@@ -63,6 +63,23 @@ namespace :test do
     def abort_with(msg)
       warn(msg)
       exit(1)
+    end
+
+    def env_true?(name, default: false)
+      raw = ENV.fetch(name, default ? "1" : "0").to_s.strip.downcase
+      %w[1 true yes on].include?(raw)
+    end
+
+    def with_linux_dev_mode
+      prev = ENV["OPTK_TEST_DOCKER_LINUX_DEV_MODE"]
+      ENV["OPTK_TEST_DOCKER_LINUX_DEV_MODE"] = "1"
+      yield
+    ensure
+      if prev.nil?
+        ENV.delete("OPTK_TEST_DOCKER_LINUX_DEV_MODE")
+      else
+        ENV["OPTK_TEST_DOCKER_LINUX_DEV_MODE"] = prev
+      end
     end
 
     def shell!(cmd)
@@ -112,7 +129,7 @@ namespace :test do
     end
 
     def dependency_services
-      env = ENV["OP_TEST_DOCKER_DEPENDENCY_SERVICES"]
+      env = ENV["OPTK_TEST_DOCKER_DEPENDENCY_SERVICES"]
       return env.split(",").map(&:strip).reject(&:empty?) if env && !env.strip.empty?
 
       component_config.dependency_services.map(&:to_s)
@@ -165,7 +182,7 @@ namespace :test do
     end
 
     def compose_down(files:, compose_scope:, profiles: [])
-      return puts("OP_KEEP_CONTAINERS=1 set, skipping docker compose down") if ENV["OP_KEEP_CONTAINERS"] == "1"
+      return puts("OPTK_KEEP_CONTAINERS=1 set, skipping docker compose down") if ENV["OPTK_KEEP_CONTAINERS"] == "1"
 
       cmd = [compose_base(files, compose_scope: compose_scope), profile_flags(profiles), "down"].reject(&:empty?).join(" ")
       shell!(cmd)
@@ -186,19 +203,12 @@ namespace :test do
     end
 
     def run_linux_tests(key)
-      override = backend_override_for(key)
-      abort_with("Missing compose override file: #{override}") unless File.exist?(override)
-      abort_with("Missing compose override file: #{LINUX_NO_PORTS_OVERRIDE}") unless File.exist?(LINUX_NO_PORTS_OVERRIDE)
-
-      files = compose_files_for(key, linux: true)
-      profiles = selected_profiles(key, linux: true)
-      compose_scope = compose_scope_name(key: key, linux: true)
-      compose_up(files: files, profiles: profiles, compose_scope: compose_scope)
-
-      shell!(
-        "#{compose_base(files, compose_scope: compose_scope)} #{profile_flags(profiles)} " \
-        "run --rm --build #{app_service} bundle exec rake test #{linux_test_rake_args}"
-      )
+      with_linux_stack(key) do |files:, profiles:, compose_scope:, run_flags:|
+        shell!(
+          "#{compose_base(files, compose_scope: compose_scope)} #{profile_flags(profiles)} " \
+          "run --rm #{run_flags} #{app_service} bundle exec rake test #{linux_test_rake_args}"
+        )
+      end
     end
 
     def linux_test_rake_args
@@ -210,13 +220,22 @@ namespace :test do
       args << if testopts && !testopts.strip.empty?
         "TESTOPTS=#{Shellwords.escape(testopts)}"
       else
-        "TESTOPTS=-v"
+        "TESTOPTS=--verbose"
       end
 
       args.join(" ")
     end
 
     def run_linux_shell(key)
+      with_linux_stack(key) do |files:, profiles:, compose_scope:, run_flags:|
+        shell!(
+          "#{compose_base(files, compose_scope: compose_scope)} #{profile_flags(profiles)} " \
+          "run --rm #{run_flags} #{app_service} bash"
+        )
+      end
+    end
+
+    def with_linux_stack(key)
       override = backend_override_for(key)
       abort_with("Missing compose override file: #{override}") unless File.exist?(override)
       abort_with("Missing compose override file: #{LINUX_NO_PORTS_OVERRIDE}") unless File.exist?(LINUX_NO_PORTS_OVERRIDE)
@@ -226,103 +245,100 @@ namespace :test do
       compose_scope = compose_scope_name(key: key, linux: true)
       compose_up(files: files, profiles: profiles, compose_scope: compose_scope)
 
-      shell!(
-        "#{compose_base(files, compose_scope: compose_scope)} #{profile_flags(profiles)} " \
-        "run --rm --build #{app_service} bash"
-      )
+      run_flags = linux_run_flags(compose_scope: compose_scope)
+      yield(files: files, profiles: profiles, compose_scope: compose_scope, run_flags: run_flags)
     end
 
-    desc "Run unit tests with AllegroGraph backend (docker deps, host Ruby)"
-    task :ag do
-      files = compose_files_for(:ag, linux: false)
-      compose_scope = compose_scope_name(key: :ag, linux: false)
-      run_host_tests(:ag)
+    def linux_run_flags(compose_scope:)
+      flags = []
+      flags << "--build" if linux_build_enabled?
+      flags.concat(linux_mount_flags(compose_scope: compose_scope))
+      flags.join(" ")
+    end
+
+    def linux_build_enabled?
+      return false if linux_dev_mode?
+
+      env_true?("OPTK_TEST_DOCKER_LINUX_BUILD", default: true)
+    end
+
+    def linux_dev_mode?
+      env_true?("OPTK_TEST_DOCKER_LINUX_DEV_MODE", default: false)
+    end
+
+    def linux_mount_workdir_enabled?
+      return true if linux_dev_mode?
+
+      env_true?("OPTK_TEST_DOCKER_LINUX_MOUNT_WORKDIR", default: false)
+    end
+
+    def linux_bundle_volume_enabled?
+      return true if linux_dev_mode?
+
+      env_true?("OPTK_TEST_DOCKER_LINUX_BUNDLE_VOLUME", default: false)
+    end
+
+    def linux_mount_flags(compose_scope:)
+      flags = []
+      if linux_mount_workdir_enabled?
+        flags << "-v #{Shellwords.escape("#{Dir.pwd}:/app")}"
+      end
+      if linux_bundle_volume_enabled?
+        flags << "-v #{Shellwords.escape("#{compose_scope}-bundle:/usr/local/bundle")}"
+      end
+      flags
+    end
+
+    def with_backend_compose(key, linux:)
+      files = compose_files_for(key, linux: linux)
+      compose_scope = compose_scope_name(key: key, linux: linux)
+      yield(files, compose_scope)
     ensure
-      Rake::Task["test"].reenable
-      compose_down(files: files, profiles: selected_profiles(:ag, linux: false), compose_scope: compose_scope)
-    end
-
-    desc "Run unit tests with AllegroGraph backend (docker deps, Linux container)"
-    task "ag:linux" do
-      files = compose_files_for(:ag, linux: true)
-      compose_scope = compose_scope_name(key: :ag, linux: true)
-      begin
-        run_linux_tests(:ag)
-      ensure
-        compose_down(files: files, profiles: selected_profiles(:ag, linux: true), compose_scope: compose_scope)
+      if files && compose_scope
+        compose_down(files: files, profiles: selected_profiles(key, linux: linux), compose_scope: compose_scope)
       end
     end
 
-    desc "Run unit tests with 4store backend (docker deps, host Ruby)"
-    task :fs do
-      files = compose_files_for(:fs, linux: false)
-      compose_scope = compose_scope_name(key: :fs, linux: false)
-      run_host_tests(:fs)
-    ensure
-      Rake::Task["test"].reenable
-      compose_down(files: files, profiles: selected_profiles(:fs, linux: false), compose_scope: compose_scope)
-    end
+    def define_backend_tasks(key)
+      desc "Run unit tests with #{backend_label(key)} backend (docker deps, host Ruby)"
+      task key do
+        with_backend_compose(key, linux: false) do
+          run_host_tests(key)
+        end
+        Rake::Task["test"].reenable
+      end
 
-    desc "Run unit tests with 4store backend (docker deps, Linux container)"
-    task "fs:linux" do
-      files = compose_files_for(:fs, linux: true)
-      compose_scope = compose_scope_name(key: :fs, linux: true)
-      begin
-        run_linux_tests(:fs)
+      desc "Run unit tests with #{backend_label(key)} backend (docker deps, Linux container)"
+      task "#{key}:linux" do
+        with_backend_compose(key, linux: true) do
+          run_linux_tests(key)
+        end
+      end
+
+      desc "Run unit tests with #{backend_label(key)} backend (Linux container, dev mode)"
+      task "#{key}:linux:dev" do
+        with_linux_dev_mode { Rake::Task["test:docker:#{key}:linux"].invoke }
       ensure
-        compose_down(files: files, profiles: selected_profiles(:fs, linux: true), compose_scope: compose_scope)
+        Rake::Task["test:docker:#{key}:linux"].reenable
       end
     end
 
-    desc "Run unit tests with Virtuoso backend (docker deps, host Ruby)"
-    task :vo do
-      files = compose_files_for(:vo, linux: false)
-      compose_scope = compose_scope_name(key: :vo, linux: false)
-      run_host_tests(:vo)
-    ensure
-      Rake::Task["test"].reenable
-      compose_down(files: files, profiles: selected_profiles(:vo, linux: false), compose_scope: compose_scope)
+    def backend_label(key)
+      labels = {
+        ag: "AllegroGraph",
+        fs: "4store",
+        vo: "Virtuoso",
+        gd: "GraphDB"
+      }
+      labels.fetch(key)
     end
 
-    desc "Run unit tests with Virtuoso backend (docker deps, Linux container)"
-    task "vo:linux" do
-      files = compose_files_for(:vo, linux: true)
-      compose_scope = compose_scope_name(key: :vo, linux: true)
-      begin
-        run_linux_tests(:vo)
-      ensure
-        compose_down(files: files, profiles: selected_profiles(:vo, linux: true), compose_scope: compose_scope)
-      end
-    end
-
-    desc "Run unit tests with GraphDB backend (docker deps, host Ruby)"
-    task :gd do
-      files = compose_files_for(:gd, linux: false)
-      compose_scope = compose_scope_name(key: :gd, linux: false)
-      run_host_tests(:gd)
-    ensure
-      Rake::Task["test"].reenable
-      compose_down(files: files, profiles: selected_profiles(:gd, linux: false), compose_scope: compose_scope)
-    end
-
-    desc "Run unit tests with GraphDB backend (docker deps, Linux container)"
-    task "gd:linux" do
-      files = compose_files_for(:gd, linux: true)
-      compose_scope = compose_scope_name(key: :gd, linux: true)
-      begin
-        run_linux_tests(:gd)
-      ensure
-        compose_down(files: files, profiles: selected_profiles(:gd, linux: true), compose_scope: compose_scope)
-      end
-    end
-
-    desc "Run Linux-container unit tests against all backends in parallel"
-    task "all:linux" do
+    def run_backends_in_parallel(task_suffix:)
       backends = configured_backends.map(&:to_s)
       children = {}
 
       backends.each do |backend|
-        cmd = [RbConfig.ruby, "-S", "bundle", "exec", "rake", "test:docker:#{backend}:linux"]
+        cmd = [RbConfig.ruby, "-S", "bundle", "exec", "rake", "test:docker:#{backend}:#{task_suffix}"]
         puts "Starting [#{backend}]: #{cmd.join(" ")}"
         pid = spawn(*cmd, chdir: Dir.pwd, out: $stdout, err: $stderr)
         children[pid] = backend
@@ -343,6 +359,18 @@ namespace :test do
       abort_with("Parallel backend run failed: #{failures.join(", ")}") unless failures.empty?
     end
 
+    BACKENDS.keys.each { |key| define_backend_tasks(key) }
+
+    desc "Run Linux-container unit tests against all backends in parallel"
+    task "all:linux" do
+      run_backends_in_parallel(task_suffix: "linux")
+    end
+
+    desc "Run Linux-container unit tests against all backends in parallel (dev mode)"
+    task "all:linux:dev" do
+      run_backends_in_parallel(task_suffix: "linux:dev")
+    end
+
     desc "Start a shell in the Linux test container (default backend: fs)"
     task :shell, [:backend] do |_t, args|
       key = (args[:backend] || DEFAULT_BACKEND).to_sym
@@ -354,6 +382,13 @@ namespace :test do
       ensure
         compose_down(files: files, profiles: selected_profiles(key, linux: true), compose_scope: compose_scope)
       end
+    end
+
+    desc "Start a shell in the Linux test container in dev mode (default backend: fs)"
+    task "shell:dev", [:backend] do |_t, args|
+      with_linux_dev_mode { Rake::Task["test:docker:shell"].invoke(args[:backend]) }
+    ensure
+      Rake::Task["test:docker:shell"].reenable
     end
 
     desc "Start backend services for development (default backend: fs)"
