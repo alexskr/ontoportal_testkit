@@ -18,8 +18,6 @@ services:
         condition: service_healthy
       redis-ut:
         condition: service_healthy
-          #      mgrep-ut:
-          #condition: service_healthy
     profiles:
       - linux
 
@@ -46,19 +44,6 @@ services:
        timeout: 5s
        retries: 5
 
-  # mgrep-ut:
-  #   image: ontoportal/mgrep:0.0.3
-  #   platform: linux/amd64
-  #   healthcheck:
-  #     test: ["CMD", "nc", "-z", "-v", "127.0.0.1", "55556"]
-  #     start_period: 3s
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   profiles:
-  #     - mgrep
-
-
   4store-ut:
     image: bde2020/4store
     platform: linux/amd64
@@ -79,7 +64,7 @@ services:
 
   agraph-ut:
     image: franzinc/agraph:v8.4.3
-    platform: linux/amd64 #agraph doesn't provide arm platform 
+    platform: linux/amd64 # agraph doesn't provide arm platform
     environment:
       - AGRAPH_SUPER_USER=test
       - AGRAPH_SUPER_PASSWORD=xyzzy
@@ -94,7 +79,7 @@ services:
        ; tail -f /agraph/data/agraph.log"
     healthcheck:
       test: ["CMD", "agtool", "storage-report", "ontoportal_test"]
-      start_period: 30s #AllegroGraph can take a loooooong time to start
+      start_period: 30s # AllegroGraph can take a very loooooong time to start
       interval: 20s
       timeout: 10s
       retries: 20
@@ -137,7 +122,7 @@ services:
     volumes:
       - ./test/fixtures/backends/graphdb:/opt/graphdb/dist/configs/templates/data
     entrypoint: >
-      bash -c " importrdf load -f -c /opt/graphdb/dist/configs/templates/data/graphdb-repo-config.ttl -m parallel /opt/graphdb/dist/configs/templates/data/graphdb-test-load.nt 
-      ; graphdb -Ddefault.min.distinct.threshold=3000 "
+      bash -c "importrdf load -f -c /opt/graphdb/dist/configs/templates/data/graphdb-repo-config.ttl -m parallel /opt/graphdb/dist/configs/templates/data/graphdb-test-load.nt
+      ; graphdb -Ddefault.min.distinct.threshold=3000"
     profiles:
       - gd
