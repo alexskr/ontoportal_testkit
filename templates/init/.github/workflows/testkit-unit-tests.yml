@@ -9,7 +9,7 @@ on:
   pull_request:
 
 env:
-  OPTK_CI_RUN_MODE: ${{ vars.OPTK_CI_RUN_MODE || 'linux' }}
+  OPTK_CI_RUN_MODE: ${{ vars.OPTK_CI_RUN_MODE || 'container' }}
 
 jobs:
   prepare:
@@ -54,12 +54,12 @@ jobs:
           TESTOPTS: "-v"
           BACKEND: ${{ matrix.backend }}
         run: |
-          MODE="${OPTK_CI_RUN_MODE:-linux}"
+          MODE="${OPTK_CI_RUN_MODE:-container}"
           TASK="test:docker:${BACKEND}"
-          if [ "$MODE" = "linux" ]; then
-            TASK="${TASK}:linux"
+          if [ "$MODE" = "container" ]; then
+            TASK="${TASK}:container"
           elif [ "$MODE" != "native" ]; then
-            echo "Invalid OPTK_CI_RUN_MODE=$MODE (expected linux or native)"
+            echo "Invalid OPTK_CI_RUN_MODE=$MODE (expected container or native)"
             exit 1
           fi
 

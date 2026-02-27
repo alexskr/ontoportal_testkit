@@ -109,7 +109,7 @@ namespace :test do
       name = component_config.component_name.to_s.strip
       name = File.basename(Dir.pwd) if name.empty?
 
-      scoped = [name, key&.to_s, (linux ? "linux" : nil)].compact.join("-")
+      scoped = [name, key&.to_s, (linux ? "container" : nil)].compact.join("-")
       normalized = scoped.downcase.gsub(/[^a-z0-9_-]/, "-")
       normalized = "op-testkit" if normalized.empty?
       normalized
@@ -318,18 +318,18 @@ namespace :test do
         Rake::Task["test"].reenable
       end
 
-      desc "Run unit tests with #{backend_label(key)} backend (docker deps, Linux container)"
-      task "#{key}:linux" do
+      desc "Run unit tests with #{backend_label(key)} backend (docker deps, linux container)"
+      task "#{key}:container" do
         with_backend_compose(key, linux: true) do
           run_linux_tests(key)
         end
       end
 
-      desc "Run unit tests with #{backend_label(key)} backend (Linux container, dev mode)"
-      task "#{key}:linux:dev" do
-        with_linux_dev_mode { Rake::Task["test:docker:#{key}:linux"].invoke }
+      desc "Run unit tests with #{backend_label(key)} backend (linux container, dev mode)"
+      task "#{key}:container:dev" do
+        with_linux_dev_mode { Rake::Task["test:docker:#{key}:container"].invoke }
       ensure
-        Rake::Task["test:docker:#{key}:linux"].reenable
+        Rake::Task["test:docker:#{key}:container"].reenable
       end
     end
 
@@ -371,17 +371,17 @@ namespace :test do
 
     BACKENDS.keys.each { |key| define_backend_tasks(key) }
 
-    desc "Run Linux-container unit tests against all backends in parallel"
-    task "all:linux" do
-      run_backends_in_parallel(task_suffix: "linux")
+    desc "Run linux-container unit tests against all backends in parallel"
+    task "all:container" do
+      run_backends_in_parallel(task_suffix: "container")
     end
 
-    desc "Run Linux-container unit tests against all backends in parallel (dev mode)"
-    task "all:linux:dev" do
-      run_backends_in_parallel(task_suffix: "linux:dev")
+    desc "Run linux-container unit tests against all backends in parallel (dev mode)"
+    task "all:container:dev" do
+      run_backends_in_parallel(task_suffix: "container:dev")
     end
 
-    desc "Start a shell in the Linux test container (default backend: fs)"
+    desc "Start a shell in the linux test container (default backend: fs)"
     task :shell, [:backend] do |_t, args|
       key = (args[:backend] || DEFAULT_BACKEND).to_sym
       cfg!(key)
@@ -394,7 +394,7 @@ namespace :test do
       end
     end
 
-    desc "Start a shell in the Linux test container in dev mode (default backend: fs)"
+    desc "Start a shell in the linux test container in dev mode (default backend: fs)"
     task "shell:dev", [:backend] do |_t, args|
       with_linux_dev_mode { Rake::Task["test:docker:shell"].invoke(args[:backend]) }
     ensure

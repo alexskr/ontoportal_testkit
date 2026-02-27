@@ -31,7 +31,7 @@ require "ontoportal/testkit/tasks"
 Requiring `ontoportal/testkit/tasks` loads all `ontoportal_testkit` rake tasks from this gem (`rakelib/*.rake`) into the consumer component.
 The docker tasks use the compose files packaged inside this gem (`docker/compose/base.yml` and `docker/compose/**/*.yml`), not compose files from the consumer repo.
 Compose commands use component name from `.ontoportal-testkit.yml` (`component_name`) via `docker compose -p`, so container/network names reflect the consumer component.
-For backend-scoped runs, compose scope names are suffixed per backend (and `-linux` for Linux container runs) so different backend runs can execute in parallel without collisions.
+For backend-scoped runs, compose scope names are suffixed per backend (and `-container` for container runs) so different backend runs can execute in parallel without collisions.
 
 This is intentionally a practical first step. It does not yet attempt to fully centralize all CI behavior for all components.
 
@@ -107,18 +107,18 @@ cd ontoportal_testkit
 bundle install
 bundle exec rake -T
 bundle exec rake test:docker:up:all
-bundle exec rake test:docker:all:linux
+bundle exec rake test:docker:all:container
 bundle exec rake "test:docker:down[all]"
 ```
 
 ### Faster Linux Docker test loop
 
-By default, `test:docker:*:linux` runs with `docker compose run --build`, which ensures a fresh image but adds rebuild overhead.
+By default, `test:docker:*:container` runs with `docker compose run --build`, which ensures a fresh image but adds rebuild overhead.
 You can enable a faster dev loop with mounted source and cached gems using dedicated dev aliases:
 
 ```bash
-bundle exec rake test:docker:fs:linux:dev
-bundle exec rake test:docker:all:linux:dev
+bundle exec rake test:docker:fs:container:dev
+bundle exec rake test:docker:all:container:dev
 bundle exec rake "test:docker:shell:dev[fs]"
 ```
 
@@ -129,3 +129,20 @@ Dev aliases enable `OPTK_TEST_DOCKER_LINUX_DEV_MODE=1`, which implies:
 - `OPTK_TEST_DOCKER_LINUX_BUNDLE_VOLUME=1` (named volume at `/usr/local/bundle`)
 
 You can also set these flags independently if you only want part of the behavior.
+
+## Integration Smoke Test Against a Real Component
+
+You can run an opt-in smoke test against a local component checkout (for example `goo`) using a temporary copy, so your original checkout is not modified:
+
+```bash
+OPTK_COMPONENT_PATH=../goo bundle exec rake test:testkit:integration:component
+```
+
+By default, this runs `test:docker:fs:container` in the temporary component copy.
+You can override the task:
+
+```bash
+OPTK_COMPONENT_PATH=../goo \
+OPTK_INTEGRATION_RAKE_TASK=test:docker:fs \
+bundle exec rake test:testkit:integration:component
+```
