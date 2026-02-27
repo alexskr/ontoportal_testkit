@@ -117,7 +117,8 @@ namespace :test do
 
     def compose_base(files, compose_scope:)
       component_dir = Shellwords.escape(Dir.pwd)
-      "docker compose --project-directory #{component_dir} -p #{compose_scope} #{compose_files(files)}"
+      testkit_root = Shellwords.escape(TESTKIT_ROOT)
+      "OPTK_TESTKIT_ROOT=#{testkit_root} docker compose --project-directory #{component_dir} -p #{compose_scope} #{compose_files(files)}"
     end
 
     def backend_override_for(key)

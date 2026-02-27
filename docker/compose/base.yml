@@ -96,7 +96,7 @@ services:
       - 1111:1111
       - 8890:8890
     volumes:
-      - ./test/fixtures/backends/virtuoso_initdb_d:/initdb.d
+      - ${OPTK_TESTKIT_ROOT:?Set OPTK_TESTKIT_ROOT}/docker/fixtures/backends/virtuoso_initdb_d:/initdb.d
     healthcheck:
       test: [ "CMD-SHELL", "echo 'status();' | isql localhost:1111 dba dba || exit 1" ]
       start_period: 10s
@@ -120,7 +120,7 @@ services:
       start_period: 10s
       interval: 10s
     volumes:
-      - ./test/fixtures/backends/graphdb:/opt/graphdb/dist/configs/templates/data
+      - ${OPTK_TESTKIT_ROOT:?Set OPTK_TESTKIT_ROOT}/docker/fixtures/backends/graphdb:/opt/graphdb/dist/configs/templates/data
     entrypoint: >
       bash -c "importrdf load -f -c /opt/graphdb/dist/configs/templates/data/graphdb-repo-config.ttl -m parallel /opt/graphdb/dist/configs/templates/data/graphdb-test-load.nt
       ; graphdb -Ddefault.min.distinct.threshold=3000"
