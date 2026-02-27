@@ -13,6 +13,7 @@ services:
       MGREP_PORT: 55556
       SOLR_TERM_SEARCH_URL: http://solr-ut:8983/solr
       SOLR_PROP_SEARCH_URL: http://solr-ut:8983/solr
+      SEARCH_SERVER_URL: http://solr-ut:8983/solr
     depends_on:
       solr-ut:
         condition: service_healthy
