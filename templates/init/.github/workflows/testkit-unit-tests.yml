@@ -8,6 +8,9 @@ on:
       - '**'
   pull_request:
 
+env:
+  OPTK_CI_RUN_MODE: ${{ vars.OPTK_CI_RUN_MODE || 'linux' }}
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -45,13 +48,22 @@ jobs:
           repository: alexskr/ontoportal_testkit
           path: .tooling/ontoportal_testkit
 
-      - name: Run unit tests in linux container
+      - name: Run unit tests
         env:
           CI: "true"
           TESTOPTS: "-v"
           BACKEND: ${{ matrix.backend }}
         run: |
-          ruby -I .tooling/ontoportal_testkit/lib -e 'require "rake"; require "ontoportal/testkit/tasks"; Rake::Task["test:docker:#{ENV.fetch("BACKEND")}:linux"].invoke'
+          MODE="${OPTK_CI_RUN_MODE:-linux}"
+          TASK="test:docker:${BACKEND}"
+          if [ "$MODE" = "linux" ]; then
+            TASK="${TASK}:linux"
+          elif [ "$MODE" != "native" ]; then
+            echo "Invalid OPTK_CI_RUN_MODE=$MODE (expected linux or native)"
+            exit 1
+          fi
+
+          TASK="$TASK" ruby -I .tooling/ontoportal_testkit/lib -e 'require "rake"; require "ontoportal/testkit/tasks"; Rake::Task[ENV.fetch("TASK")].invoke'
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
