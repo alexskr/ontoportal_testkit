@@ -11,5 +11,3 @@ services:
     ports: []
   graphdb-ut:
     ports: []
-  mgrep-ut:
-    ports: []

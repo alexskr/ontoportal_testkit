@@ -147,7 +147,16 @@ namespace :test do
       files = [BASE_COMPOSE]
       files << backend_override_for(key) if linux && key
       files.concat(dependency_override_files)
-      files << LINUX_NO_PORTS_OVERRIDE if linux
+      files.concat(runtime_no_ports_overrides) if linux
+      files
+    end
+
+    def runtime_no_ports_overrides
+      files = [LINUX_NO_PORTS_OVERRIDE]
+      dependency_services.each do |service_name|
+        override = File.join(RUNTIME_OVERRIDE_DIR, "no-ports-#{service_name}.yml")
+        files << override if File.exist?(override)
+      end
       files
     end
 
