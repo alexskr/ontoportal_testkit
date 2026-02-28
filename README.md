@@ -122,11 +122,11 @@ bundle exec rake test:docker:all:container:dev
 bundle exec rake "test:docker:shell:dev[fs]"
 ```
 
-Dev aliases enable `OPTK_TEST_DOCKER_LINUX_DEV_MODE=1`, which implies:
+Dev aliases enable `OPTK_TEST_DOCKER_CONTAINER_DEV_MODE=1`, which implies:
 
-- `OPTK_TEST_DOCKER_LINUX_BUILD=0` (skip `--build`)
-- `OPTK_TEST_DOCKER_LINUX_MOUNT_WORKDIR=1` (mount current repo at `/app`)
-- `OPTK_TEST_DOCKER_LINUX_BUNDLE_VOLUME=1` (named volume at `/usr/local/bundle`)
+- `OPTK_TEST_DOCKER_CONTAINER_BUILD=0` (skip `--build`)
+- `OPTK_TEST_DOCKER_CONTAINER_MOUNT_WORKDIR=1` (mount current repo at `/app`)
+- `OPTK_TEST_DOCKER_CONTAINER_BUNDLE_VOLUME=1` (named volume at `/usr/local/bundle`)
 
 You can also set these flags independently if you only want part of the behavior.
 
@@ -139,10 +139,60 @@ OPTK_COMPONENT_PATH=../goo bundle exec rake test:testkit:integration:component
 ```
 
 By default, this runs `test:docker:fs:container` in the temporary component copy.
-You can override the task:
+You can override the task list:
 
 ```bash
 OPTK_COMPONENT_PATH=../goo \
-OPTK_INTEGRATION_RAKE_TASK=test:docker:fs \
+OPTK_INTEGRATION_RAKE_TASKS=test:docker:fs,test:docker:ag \
 bundle exec rake test:testkit:integration:component
+```
+
+If the component is not yet compatible with your host Ruby test stack, keep it container-only:
+
+```bash
+OPTK_INTEGRATION_RAKE_TASKS=test:docker:fs:container \
+bundle exec rake test:testkit:integration:goo
+```
+
+You can also run smoke tests directly against fresh component clones:
+
+```bash
+bundle exec rake test:testkit:integration:goo
+bundle exec rake test:testkit:integration:ontologies_linked_data
+bundle exec rake test:testkit:integration:ontologies_api
+```
+
+Or run all components listed in `.ontoportal-testkit.integration.yml`:
+
+```bash
+bundle exec rake test:testkit:integration:configured
+```
+
+Config example:
+
+```yaml
+repo_org: ncbo
+components:
+  - goo
+  - ontologies_linked_data
+  - ontologies_api
+```
+
+This file is intended for maintaining `ontoportal_testkit` itself.
+It is not required for regular component usage of testkit tasks.
+
+Optional clone controls:
+
+- `OPTK_COMPONENT_REPO_ORG` (default: `ncbo`; for example set to `agroportal`)
+- `OPTK_COMPONENT_REPO_URL` (explicit URL override; if set, takes precedence over org/repo naming)
+- `OPTK_COMPONENT_REPO_REF` (branch/tag/commit to checkout; takes precedence)
+- `OPTK_COMPONENT_REPO_BRANCH` (branch name to checkout when `OPTK_COMPONENT_REPO_REF` is not set)
+- `OPTK_INTEGRATION_CONFIG_PATH` (optional path override for `.ontoportal-testkit.integration.yml`)
+
+Example using a branch:
+
+```bash
+OPTK_COMPONENT_REPO_ORG=agroportal \
+OPTK_COMPONENT_REPO_BRANCH=my-feature-branch \
+bundle exec rake test:testkit:integration:goo
 ```

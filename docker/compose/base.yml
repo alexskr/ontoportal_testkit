@@ -1,6 +1,6 @@
 # unit tests in containerased env
 services:
-  test-linux:
+  test-container:
     build:
       context: .
       args:
@@ -20,7 +20,7 @@ services:
       redis-ut:
         condition: service_healthy
     profiles:
-      - linux
+      - container
 
   redis-ut:
     image: redis

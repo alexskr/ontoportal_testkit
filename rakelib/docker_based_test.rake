@@ -15,7 +15,7 @@ namespace :test do
     BACKEND_OVERRIDE_DIR = File.join(COMPOSE_ROOT, "backends") unless defined?(BACKEND_OVERRIDE_DIR)
     SERVICE_OVERRIDE_DIR = File.join(COMPOSE_ROOT, "services") unless defined?(SERVICE_OVERRIDE_DIR)
     RUNTIME_OVERRIDE_DIR = File.join(COMPOSE_ROOT, "runtime") unless defined?(RUNTIME_OVERRIDE_DIR)
-    LINUX_NO_PORTS_OVERRIDE = File.join(RUNTIME_OVERRIDE_DIR, "no-ports.yml") unless defined?(LINUX_NO_PORTS_OVERRIDE)
+    CONTAINER_NO_PORTS_OVERRIDE = File.join(RUNTIME_OVERRIDE_DIR, "no-ports.yml") unless defined?(CONTAINER_NO_PORTS_OVERRIDE)
     TIMEOUT = (ENV["OPTK_TEST_DOCKER_TIMEOUT"] || "600").to_i unless defined?(TIMEOUT)
     DEFAULT_BACKEND = (ENV["OPTK_TEST_DOCKER_BACKEND"] || "fs").to_sym unless defined?(DEFAULT_BACKEND)
 
@@ -70,15 +70,15 @@ namespace :test do
       %w[1 true yes on].include?(raw)
     end
 
-    def with_linux_dev_mode
-      prev = ENV["OPTK_TEST_DOCKER_LINUX_DEV_MODE"]
-      ENV["OPTK_TEST_DOCKER_LINUX_DEV_MODE"] = "1"
+    def with_container_dev_mode
+      prev = ENV["OPTK_TEST_DOCKER_CONTAINER_DEV_MODE"]
+      ENV["OPTK_TEST_DOCKER_CONTAINER_DEV_MODE"] = "1"
       yield
     ensure
       if prev.nil?
-        ENV.delete("OPTK_TEST_DOCKER_LINUX_DEV_MODE")
+        ENV.delete("OPTK_TEST_DOCKER_CONTAINER_DEV_MODE")
       else
-        ENV["OPTK_TEST_DOCKER_LINUX_DEV_MODE"] = prev
+        ENV["OPTK_TEST_DOCKER_CONTAINER_DEV_MODE"] = prev
       end
     end
 
@@ -105,11 +105,11 @@ namespace :test do
       Array(profiles).map { |profile| "--profile #{profile}" }.join(" ")
     end
 
-    def compose_scope_name(key: nil, linux: false)
+    def compose_scope_name(key: nil, container: false)
       name = component_config.component_name.to_s.strip
       name = File.basename(Dir.pwd) if name.empty?
 
-      scoped = [name, key&.to_s, (linux ? "container" : nil)].compact.join("-")
+      scoped = [name, key&.to_s, (container ? "container" : nil)].compact.join("-")
       normalized = scoped.downcase.gsub(/[^a-z0-9_-]/, "-")
       normalized = "op-testkit" if normalized.empty?
       normalized
@@ -144,16 +144,16 @@ namespace :test do
       end
     end
 
-    def compose_files_for(key = nil, linux: false)
+    def compose_files_for(key = nil, container: false)
       files = [BASE_COMPOSE]
-      files << backend_override_for(key) if linux && key
+      files << backend_override_for(key) if container && key
       files.concat(dependency_override_files)
-      files.concat(runtime_no_ports_overrides) if linux
+      files.concat(runtime_no_ports_overrides) if container
       files
     end
 
     def runtime_no_ports_overrides
-      files = [LINUX_NO_PORTS_OVERRIDE]
+      files = [CONTAINER_NO_PORTS_OVERRIDE]
       dependency_services.each do |service_name|
         override = File.join(RUNTIME_OVERRIDE_DIR, "no-ports-#{service_name}.yml")
         files << override if File.exist?(override)
@@ -165,16 +165,16 @@ namespace :test do
       component_config.app_service.to_s
     end
 
-    def selected_profiles(key, linux: false)
+    def selected_profiles(key, container: false)
       profiles = [key.to_s]
-      profiles << "linux" if linux
+      profiles << "container" if container
       profiles.concat(dependency_services)
       profiles.uniq
     end
 
-    def all_backend_profiles(linux: false)
+    def all_backend_profiles(container: false)
       profiles = configured_backends.map(&:to_s)
-      profiles << "linux" if linux
+      profiles << "container" if container
       profiles.concat(dependency_services)
       profiles.uniq
     end
@@ -204,24 +204,24 @@ namespace :test do
 
     def run_host_tests(key)
       apply_host_env(key)
-      files = compose_files_for(key, linux: false)
-      profiles = selected_profiles(key, linux: false)
-      compose_scope = compose_scope_name(key: key, linux: false)
+      files = compose_files_for(key, container: false)
+      profiles = selected_profiles(key, container: false)
+      compose_scope = compose_scope_name(key: key, container: false)
 
       compose_up(files: files, profiles: profiles, compose_scope: compose_scope)
       Rake::Task["test"].invoke
     end
 
-    def run_linux_tests(key)
-      with_linux_stack(key) do |files:, profiles:, compose_scope:, run_flags:|
+    def run_container_tests(key)
+      with_container_stack(key) do |files:, profiles:, compose_scope:, run_flags:|
         shell!(
           "#{compose_base(files, compose_scope: compose_scope)} #{profile_flags(profiles)} " \
-          "run --rm #{run_flags} #{app_service} bundle exec rake test #{linux_test_rake_args}"
+          "run --rm #{run_flags} #{app_service} bundle exec rake test #{container_test_rake_args}"
         )
       end
     end
 
-    def linux_test_rake_args
+    def container_test_rake_args
       args = []
       test = ENV["TEST"]
       testopts = ENV["TESTOPTS"]
@@ -236,8 +236,8 @@ namespace :test do
       args.join(" ")
     end
 
-    def run_linux_shell(key)
-      with_linux_stack(key) do |files:, profiles:, compose_scope:, run_flags:|
+    def run_container_shell(key)
+      with_container_stack(key) do |files:, profiles:, compose_scope:, run_flags:|
         shell!(
           "#{compose_base(files, compose_scope: compose_scope)} #{profile_flags(profiles)} " \
           "run --rm #{run_flags} #{app_service} bash"
@@ -245,74 +245,74 @@ namespace :test do
       end
     end
 
-    def with_linux_stack(key)
+    def with_container_stack(key)
       override = backend_override_for(key)
       abort_with("Missing compose override file: #{override}") unless File.exist?(override)
-      abort_with("Missing compose override file: #{LINUX_NO_PORTS_OVERRIDE}") unless File.exist?(LINUX_NO_PORTS_OVERRIDE)
+      abort_with("Missing compose override file: #{CONTAINER_NO_PORTS_OVERRIDE}") unless File.exist?(CONTAINER_NO_PORTS_OVERRIDE)
 
-      files = compose_files_for(key, linux: true)
-      profiles = selected_profiles(key, linux: true)
-      compose_scope = compose_scope_name(key: key, linux: true)
+      files = compose_files_for(key, container: true)
+      profiles = selected_profiles(key, container: true)
+      compose_scope = compose_scope_name(key: key, container: true)
       compose_up(files: files, profiles: profiles, compose_scope: compose_scope)
 
-      run_flags = linux_run_flags(compose_scope: compose_scope)
+      run_flags = container_run_flags(compose_scope: compose_scope)
       yield(files: files, profiles: profiles, compose_scope: compose_scope, run_flags: run_flags)
     end
 
-    def linux_run_flags(compose_scope:)
+    def container_run_flags(compose_scope:)
       flags = []
-      flags << "--build" if linux_build_enabled?
-      flags.concat(linux_mount_flags(compose_scope: compose_scope))
+      flags << "--build" if container_build_enabled?
+      flags.concat(container_mount_flags(compose_scope: compose_scope))
       flags.join(" ")
     end
 
-    def linux_build_enabled?
-      return false if linux_dev_mode?
+    def container_build_enabled?
+      return false if container_dev_mode?
 
-      env_true?("OPTK_TEST_DOCKER_LINUX_BUILD", default: true)
+      env_true?("OPTK_TEST_DOCKER_CONTAINER_BUILD", default: true)
     end
 
-    def linux_dev_mode?
-      env_true?("OPTK_TEST_DOCKER_LINUX_DEV_MODE", default: false)
+    def container_dev_mode?
+      env_true?("OPTK_TEST_DOCKER_CONTAINER_DEV_MODE", default: false)
     end
 
-    def linux_mount_workdir_enabled?
-      return true if linux_dev_mode?
+    def container_mount_workdir_enabled?
+      return true if container_dev_mode?
 
-      env_true?("OPTK_TEST_DOCKER_LINUX_MOUNT_WORKDIR", default: false)
+      env_true?("OPTK_TEST_DOCKER_CONTAINER_MOUNT_WORKDIR", default: false)
     end
 
-    def linux_bundle_volume_enabled?
-      return true if linux_dev_mode?
+    def container_bundle_volume_enabled?
+      return true if container_dev_mode?
 
-      env_true?("OPTK_TEST_DOCKER_LINUX_BUNDLE_VOLUME", default: false)
+      env_true?("OPTK_TEST_DOCKER_CONTAINER_BUNDLE_VOLUME", default: false)
     end
 
-    def linux_mount_flags(compose_scope:)
+    def container_mount_flags(compose_scope:)
       flags = []
-      if linux_mount_workdir_enabled?
+      if container_mount_workdir_enabled?
         flags << "-v #{Shellwords.escape("#{Dir.pwd}:/app")}"
       end
-      if linux_bundle_volume_enabled?
+      if container_bundle_volume_enabled?
         flags << "-v #{Shellwords.escape("#{compose_scope}-bundle:/usr/local/bundle")}"
       end
       flags
     end
 
-    def with_backend_compose(key, linux:)
-      files = compose_files_for(key, linux: linux)
-      compose_scope = compose_scope_name(key: key, linux: linux)
+    def with_backend_compose(key, container:)
+      files = compose_files_for(key, container: container)
+      compose_scope = compose_scope_name(key: key, container: container)
       yield(files, compose_scope)
     ensure
       if files && compose_scope
-        compose_down(files: files, profiles: selected_profiles(key, linux: linux), compose_scope: compose_scope)
+        compose_down(files: files, profiles: selected_profiles(key, container: container), compose_scope: compose_scope)
       end
     end
 
     def define_backend_tasks(key)
       desc "Run unit tests with #{backend_label(key)} backend (docker deps, host Ruby)"
       task key do
-        with_backend_compose(key, linux: false) do
+        with_backend_compose(key, container: false) do
           run_host_tests(key)
         end
         Rake::Task["test"].reenable
@@ -320,14 +320,14 @@ namespace :test do
 
       desc "Run unit tests with #{backend_label(key)} backend (docker deps, linux container)"
       task "#{key}:container" do
-        with_backend_compose(key, linux: true) do
-          run_linux_tests(key)
+        with_backend_compose(key, container: true) do
+          run_container_tests(key)
         end
       end
 
       desc "Run unit tests with #{backend_label(key)} backend (linux container, dev mode)"
       task "#{key}:container:dev" do
-        with_linux_dev_mode { Rake::Task["test:docker:#{key}:container"].invoke }
+        with_container_dev_mode { Rake::Task["test:docker:#{key}:container"].invoke }
       ensure
         Rake::Task["test:docker:#{key}:container"].reenable
       end
@@ -385,18 +385,18 @@ namespace :test do
     task :shell, [:backend] do |_t, args|
       key = (args[:backend] || DEFAULT_BACKEND).to_sym
       cfg!(key)
-      files = compose_files_for(key, linux: true)
-      compose_scope = compose_scope_name(key: key, linux: true)
+      files = compose_files_for(key, container: true)
+      compose_scope = compose_scope_name(key: key, container: true)
       begin
-        run_linux_shell(key)
+        run_container_shell(key)
       ensure
-        compose_down(files: files, profiles: selected_profiles(key, linux: true), compose_scope: compose_scope)
+        compose_down(files: files, profiles: selected_profiles(key, container: true), compose_scope: compose_scope)
       end
     end
 
     desc "Start a shell in the linux test container in dev mode (default backend: fs)"
     task "shell:dev", [:backend] do |_t, args|
-      with_linux_dev_mode { Rake::Task["test:docker:shell"].invoke(args[:backend]) }
+      with_container_dev_mode { Rake::Task["test:docker:shell"].invoke(args[:backend]) }
     ensure
       Rake::Task["test:docker:shell"].reenable
     end
@@ -405,10 +405,10 @@ namespace :test do
     task :up, [:backend] do |_t, args|
       key = (args[:backend] || DEFAULT_BACKEND).to_sym
       cfg!(key)
-      compose_scope = compose_scope_name(key: key, linux: false)
+      compose_scope = compose_scope_name(key: key, container: false)
       compose_up(
-        files: compose_files_for(key, linux: false),
-        profiles: selected_profiles(key, linux: false),
+        files: compose_files_for(key, container: false),
+        profiles: selected_profiles(key, container: false),
         compose_scope: compose_scope
       )
     end
@@ -416,9 +416,9 @@ namespace :test do
     desc "Start all backend services (ag, fs, vo, gd) and dependency services"
     task "up:all" do
       compose_up(
-        files: compose_files_for(nil, linux: false),
-        profiles: all_backend_profiles(linux: false),
-        compose_scope: compose_scope_name(key: :all, linux: false)
+        files: compose_files_for(nil, container: false),
+        profiles: all_backend_profiles(container: false),
+        compose_scope: compose_scope_name(key: :all, container: false)
       )
     end
 
@@ -426,22 +426,22 @@ namespace :test do
     task :down, [:backend] do |_t, args|
       if args[:backend]
         if args[:backend].to_s == "all"
-          compose_down(files: compose_files_for(nil, linux: false), profiles: all_backend_profiles(linux: false),
-            compose_scope: compose_scope_name(key: :all, linux: false))
+          compose_down(files: compose_files_for(nil, container: false), profiles: all_backend_profiles(container: false),
+            compose_scope: compose_scope_name(key: :all, container: false))
         else
           key = args[:backend].to_sym
           cfg!(key)
-          compose_down(files: compose_files_for(key, linux: false), profiles: selected_profiles(key, linux: false),
-            compose_scope: compose_scope_name(key: key, linux: false))
-          compose_down(files: compose_files_for(key, linux: true), profiles: selected_profiles(key, linux: true),
-            compose_scope: compose_scope_name(key: key, linux: true))
+          compose_down(files: compose_files_for(key, container: false), profiles: selected_profiles(key, container: false),
+            compose_scope: compose_scope_name(key: key, container: false))
+          compose_down(files: compose_files_for(key, container: true), profiles: selected_profiles(key, container: true),
+            compose_scope: compose_scope_name(key: key, container: true))
         end
       else
         configured_backends.each do |key|
-          compose_down(files: compose_files_for(key, linux: false), profiles: selected_profiles(key, linux: false),
-            compose_scope: compose_scope_name(key: key, linux: false))
-          compose_down(files: compose_files_for(key, linux: true), profiles: selected_profiles(key, linux: true),
-            compose_scope: compose_scope_name(key: key, linux: true))
+          compose_down(files: compose_files_for(key, container: false), profiles: selected_profiles(key, container: false),
+            compose_scope: compose_scope_name(key: key, container: false))
+          compose_down(files: compose_files_for(key, container: true), profiles: selected_profiles(key, container: true),
+            compose_scope: compose_scope_name(key: key, container: true))
         end
       end
     end

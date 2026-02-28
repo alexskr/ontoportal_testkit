@@ -1,5 +1,5 @@
 services:
-  test-linux:
+  test-container:
     environment:
       GOO_BACKEND_NAME: '4store'
       GOO_HOST: 4store-ut

@@ -13,6 +13,7 @@ Gem::Specification.new do |spec|
     "README.md",
     "Rakefile",
     ".ontoportal-testkit.example.yml",
+    ".ontoportal-testkit.integration.yml",
     "Dockerfile",
     "docker/**/*",
     "lib/**/*.rb",

@@ -1,5 +1,5 @@
 services:
-  test-linux:
+  test-container:
     environment:
       MGREP_HOST: mgrep-ut
       MGREP_PORT: 55556

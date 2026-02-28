@@ -1,5 +1,5 @@
 services:
-  test-linux:
+  test-container:
     environment:
       GOO_BACKEND_NAME: graphdb
       GOO_PORT: 7200

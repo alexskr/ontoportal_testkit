@@ -1,8 +1,9 @@
 component_name: your_component_name
-app_service: test-linux
+app_service: test-container
 backends:
   - fs
   - ag
   - vo
   - gd
-dependency_services: []
+dependency_services:
+  - mgrep

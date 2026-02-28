@@ -1,0 +1,5 @@
+repo_org: ncbo
+components:
+  - goo
+  - ontologies_linked_data
+  - ontologies_api

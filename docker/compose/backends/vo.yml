@@ -1,5 +1,5 @@
 services:
-  test-linux:
+  test-container:
     environment:
       GOO_BACKEND_NAME: 'virtuoso'
       GOO_HOST: virtuoso-ut

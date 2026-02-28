@@ -9,7 +9,7 @@ namespace :test do
       force_arg = args[:force].to_s.strip.downcase
       force = force_values.include?(force_arg)
       component_name = (ENV["COMPONENT_NAME"] || File.basename(Dir.pwd)).to_s.strip
-      app_service = (ENV["APP_SERVICE"] || "test-linux").to_s.strip
+      app_service = (ENV["APP_SERVICE"] || "test-container").to_s.strip
 
       config_path = Ontoportal::Testkit::ComponentConfig::DEFAULT_PATH
       dockerfile_path = "Dockerfile"

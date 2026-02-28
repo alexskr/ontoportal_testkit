@@ -17,7 +17,7 @@ module Ontoportal
       end
 
       def app_service
-        raw.fetch("app_service", "test-linux")
+        raw.fetch("app_service", "test-container")
       end
 
       def backends
