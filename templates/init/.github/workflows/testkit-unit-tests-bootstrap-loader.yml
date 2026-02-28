@@ -1,4 +1,8 @@
-name: Docker Unit Tests
+name: Docker Unit Tests (Bootstrap Loader)
+
+# Legacy variant that checks out ontoportal_testkit under .tooling and invokes
+# testkit tasks via `ruby -I ... require "ontoportal/testkit/tasks"`.
+# Keep this as a reference for repos that need workflow-level task bootstrapping.
 
 on:
   push:
@@ -46,8 +50,7 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: .ruby-version
-          bundler-cache: true
-
+      
       - name: Set up Java 11 (native mode)
         if: env.OPTK_CI_RUN_MODE == 'native'
         uses: actions/setup-java@v4
@@ -60,6 +63,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y raptor2-utils
+
+      - name: Checkout ontoportal_testkit
+        uses: actions/checkout@v4
+        with:
+          repository: alexskr/ontoportal_testkit
+          path: .tooling/ontoportal_testkit
 
       - name: Run unit tests
         env:
@@ -76,7 +85,12 @@ jobs:
             exit 1
           fi
 
-          bundle exec rake "$TASK"
+          TASK="$TASK" ruby -I .tooling/ontoportal_testkit/lib -e '
+            require "rake"
+            load "Rakefile" if File.exist?("Rakefile")
+            require "ontoportal/testkit/tasks"
+            Rake::Task[ENV.fetch("TASK")].invoke
+          '
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
