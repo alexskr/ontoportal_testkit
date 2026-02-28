@@ -1,5 +1,6 @@
 require "fileutils"
 require "erb"
+require "tempfile"
 
 namespace :test do
   namespace :testkit do
@@ -33,42 +34,37 @@ namespace :test do
 
       written = []
       skipped = []
+      unchanged = []
+      targets = [
+        { path: config_path, content: config_content },
+        { path: dockerfile_path, content: dockerfile_content },
+        { path: rake_loader_path, content: rake_loader_content },
+        { path: workflow_path, content: workflow_content }
+      ]
 
-      should_write = force || !File.exist?(config_path) || confirm_overwrite(config_path)
-      if should_write
-        File.write(config_path, config_content)
-        written << config_path
-      else
-        skipped << config_path
-      end
+      print_all_content_diffs(targets) unless force
 
-      should_write = force || !File.exist?(dockerfile_path) || confirm_overwrite(dockerfile_path)
-      if should_write
-        File.write(dockerfile_path, dockerfile_content)
-        written << dockerfile_path
-      else
-        skipped << dockerfile_path
-      end
+      targets.each do |target|
+        path = target[:path]
+        content = target[:content]
+        if File.exist?(path) && File.read(path) == content
+          unchanged << path
+          next
+        end
 
-      should_write = force || !File.exist?(rake_loader_path) || confirm_overwrite(rake_loader_path)
-      if should_write
-        FileUtils.mkdir_p("rakelib")
-        File.write(rake_loader_path, rake_loader_content)
-        written << rake_loader_path
-      else
-        skipped << rake_loader_path
-      end
-
-      should_write = force || !File.exist?(workflow_path) || confirm_overwrite(workflow_path)
-      if should_write
-        FileUtils.mkdir_p(File.dirname(workflow_path))
-        File.write(workflow_path, workflow_content)
-        written << workflow_path
-      else
-        skipped << workflow_path
+        should_write = force || !File.exist?(path) || confirm_overwrite(path)
+        if should_write
+          dir = File.dirname(path)
+          FileUtils.mkdir_p(dir) unless dir == "."
+          File.write(path, content)
+          written << path
+        else
+          skipped << path
+        end
       end
 
       puts "Written: #{written.join(", ")}" unless written.empty?
+      puts "Unchanged: #{unchanged.join(", ")}" unless unchanged.empty?
       puts "Skipped (already exists): #{skipped.join(", ")}" unless skipped.empty?
       unless force
         puts "Use force overwrite (zsh-safe):"
@@ -84,6 +80,35 @@ def confirm_overwrite(path)
   return false if answer.nil?
 
   %w[y yes].include?(answer.strip.downcase)
+end
+
+def print_all_content_diffs(targets)
+  targets.each do |target|
+    path = target[:path]
+    next unless File.exist?(path)
+
+    print_content_diff(path, target[:content])
+  end
+end
+
+def print_content_diff(path, new_content)
+  current_content = File.read(path)
+  return if current_content == new_content
+
+  Tempfile.create(["existing-", File.extname(path)]) do |existing|
+    Tempfile.create(["generated-", File.extname(path)]) do |generated|
+      existing.write(current_content)
+      existing.flush
+      generated.write(new_content)
+      generated.flush
+
+      puts "\nDiff for #{path}:"
+      system("diff", "-u",
+        "--label", "existing/#{path}", existing.path,
+        "--label", "generated/#{path}", generated.path)
+      puts
+    end
+  end
 end
 
 def read_template(template_path)

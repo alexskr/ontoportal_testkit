@@ -8,7 +8,7 @@ namespace :test do
         goo: "goo",
         ontologies_linked_data: "ontologies_linked_data",
         ontologies_api: "ontologies_api"
-      }.freeze
+      }.freeze unless defined?(REPO_TASKS)
 
       desc "Run testkit smoke test against a real component checkout (env: OPTK_COMPONENT_PATH, OPTK_COMPONENT_REPO_REF, OPTK_COMPONENT_REPO_BRANCH, OPTK_INTEGRATION_RAKE_TASKS)"
       task :component do
