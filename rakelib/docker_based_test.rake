@@ -209,7 +209,7 @@ namespace :test do
       compose_scope = compose_scope_name(key: key, container: false)
 
       compose_up(files: files, profiles: profiles, compose_scope: compose_scope)
-      Rake::Task["test"].invoke
+      with_default_testopts { Rake::Task["test"].invoke }
     end
 
     def run_container_tests(key)
@@ -224,16 +224,30 @@ namespace :test do
     def container_test_rake_args
       args = []
       test = ENV["TEST"]
-      testopts = ENV["TESTOPTS"]
 
       args << "TEST=#{Shellwords.escape(test)}" if test && !test.strip.empty?
-      args << if testopts && !testopts.strip.empty?
-        "TESTOPTS=#{Shellwords.escape(testopts)}"
-      else
-        "TESTOPTS=--verbose"
-      end
+      args << "TESTOPTS=#{Shellwords.escape(effective_testopts)}"
 
       args.join(" ")
+    end
+
+    def effective_testopts
+      raw = ENV["TESTOPTS"]
+      return "--verbose" if raw.nil? || raw.strip.empty?
+
+      raw
+    end
+
+    def with_default_testopts
+      previous = ENV["TESTOPTS"]
+      ENV["TESTOPTS"] = effective_testopts
+      yield
+    ensure
+      if previous.nil?
+        ENV.delete("TESTOPTS")
+      else
+        ENV["TESTOPTS"] = previous
+      end
     end
 
     def run_container_shell(key)
