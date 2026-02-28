@@ -28,7 +28,7 @@ If you do not want the `rakelib` loader file, you can instead add this in compon
 require "ontoportal/testkit/tasks"
 ```
 
-Requiring `ontoportal/testkit/tasks` loads all `ontoportal_testkit` rake tasks from this gem (`rakelib/*.rake`) into the consumer component.
+Requiring `ontoportal/testkit/tasks` loads the component-facing `ontoportal_testkit` rake tasks from this gem (init/config/base-image/docker tasks) into the consumer component.
 The docker tasks use the compose files packaged inside this gem (`docker/compose/base.yml` and `docker/compose/**/*.yml`), not compose files from the consumer repo.
 Compose commands use component name from `.ontoportal-testkit.yml` (`component_name`) via `docker compose -p`, so container/network names reflect the consumer component.
 For backend-scoped runs, compose scope names are suffixed per backend (and `-container` for container runs) so different backend runs can execute in parallel without collisions.
@@ -132,6 +132,9 @@ You can also set these flags independently if you only want part of the behavior
 
 ## Integration Smoke Test Against a Real Component
 
+These integration smoke tasks are maintainer-focused for the `ontoportal_testkit` repo.
+They are not loaded by default in consumer component repos via `require "ontoportal/testkit/tasks"`.
+
 You can run an opt-in smoke test against a local component checkout (for example `goo`) using a temporary copy, so your original checkout is not modified:
 
 ```bash
@@ -187,7 +190,6 @@ Optional clone controls:
 - `OPTK_COMPONENT_REPO_URL` (explicit URL override; if set, takes precedence over org/repo naming)
 - `OPTK_COMPONENT_REPO_REF` (branch/tag/commit to checkout; takes precedence)
 - `OPTK_COMPONENT_REPO_BRANCH` (branch name to checkout when `OPTK_COMPONENT_REPO_REF` is not set)
-- `OPTK_INTEGRATION_CONFIG_PATH` (optional path override for `.ontoportal-testkit.integration.yml`)
 
 Example using a branch:
 

@@ -8,7 +8,7 @@ module Ontoportal
       attr_reader :path, :raw
 
       def initialize(path = nil)
-        @path = path || ENV["OPTK_INTEGRATION_CONFIG_PATH"] || File.join(Ontoportal::Testkit.root, DEFAULT_PATH)
+        @path = path || File.join(Ontoportal::Testkit.root, DEFAULT_PATH)
         @raw = File.exist?(@path) ? load_yaml(@path) : {}
       end
 

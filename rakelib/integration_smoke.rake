@@ -8,7 +8,7 @@ namespace :test do
         goo: "goo",
         ontologies_linked_data: "ontologies_linked_data",
         ontologies_api: "ontologies_api"
-      }.freeze unless defined?(REPO_TASKS)
+      }.freeze
 
       desc "Run testkit smoke test against a real component checkout (env: OPTK_COMPONENT_PATH, OPTK_COMPONENT_REPO_REF, OPTK_COMPONENT_REPO_BRANCH, OPTK_INTEGRATION_RAKE_TASKS)"
       task :component do
@@ -30,7 +30,6 @@ namespace :test do
           workdir = File.join(tmpdir, File.basename(source_path))
           FileUtils.cp_r(source_path, workdir)
           checkout_repo_selector!(workdir: workdir, repo_ref: repo_ref, repo_branch: repo_branch)
-
           run_component_integration!(workdir: workdir, testkit_root: testkit_root, integration_tasks: integration_tasks)
         end
       end
