@@ -1,3 +1,6 @@
 tmp/
 .ruby-lsp/
 .DS_Store
+.github/workflows/testkit-unit-tests.yml
+.ontoportal-testkit.yml
+rakelib/ontoportal_testkit.rake
