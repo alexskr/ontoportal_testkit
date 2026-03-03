@@ -121,6 +121,23 @@ namespace :test do
       "OPTK_TESTKIT_ROOT=#{testkit_root} docker compose --project-directory #{component_dir} -p #{compose_scope} #{compose_files(files)}"
     end
 
+    def required_scaffold_paths
+      [
+        Ontoportal::Testkit::ComponentConfig::DEFAULT_PATH,
+        "Dockerfile"
+      ]
+    end
+
+    def ensure_testkit_initialized!
+      missing = required_scaffold_paths.reject { |path| File.exist?(path) }
+      return if missing.empty?
+
+      abort_with(
+        "Missing testkit scaffold file(s): #{missing.join(", ")}. " \
+        "Run `bundle exec rake test:testkit:init` in this component first."
+      )
+    end
+
     def backend_override_for(key)
       "#{BACKEND_OVERRIDE_DIR}/#{key}.yml"
     end
@@ -188,7 +205,9 @@ namespace :test do
     end
 
     def compose_up(files:, profiles:, compose_scope:)
+      ensure_testkit_initialized!
       shell!("#{compose_base(files, compose_scope: compose_scope)} #{profile_flags(profiles)} up -d --wait --wait-timeout #{TIMEOUT}")
+      mark_compose_started!(compose_scope)
     end
 
     def compose_down(files:, compose_scope:, profiles: [])
@@ -196,6 +215,16 @@ namespace :test do
 
       cmd = [compose_base(files, compose_scope: compose_scope), profile_flags(profiles), "down"].reject(&:empty?).join(" ")
       shell!(cmd)
+    end
+
+    def mark_compose_started!(compose_scope)
+      @started_compose_scopes ||= {}
+      @started_compose_scopes[compose_scope] = true
+    end
+
+    def compose_started?(compose_scope)
+      @started_compose_scopes ||= {}
+      @started_compose_scopes[compose_scope] == true
     end
 
     def apply_host_env(key)
@@ -318,7 +347,7 @@ namespace :test do
       compose_scope = compose_scope_name(key: key, container: container)
       yield(files, compose_scope)
     ensure
-      if files && compose_scope
+      if files && compose_scope && compose_started?(compose_scope)
         compose_down(files: files, profiles: selected_profiles(key, container: container), compose_scope: compose_scope)
       end
     end
@@ -326,6 +355,7 @@ namespace :test do
     def define_backend_tasks(key)
       desc "Run unit tests with #{backend_label(key)} backend (docker deps, host Ruby)"
       task key do
+        ensure_testkit_initialized!
         with_backend_compose(key, container: false) do
           run_host_tests(key)
         end
@@ -334,6 +364,7 @@ namespace :test do
 
       desc "Run unit tests with #{backend_label(key)} backend (docker deps, linux container)"
       task "#{key}:container" do
+        ensure_testkit_initialized!
         with_backend_compose(key, container: true) do
           run_container_tests(key)
         end
@@ -397,6 +428,7 @@ namespace :test do
 
     desc "Start a shell in the linux test container (default backend: fs)"
     task :shell, [:backend] do |_t, args|
+      ensure_testkit_initialized!
       key = (args[:backend] || DEFAULT_BACKEND).to_sym
       cfg!(key)
       files = compose_files_for(key, container: true)
@@ -404,7 +436,9 @@ namespace :test do
       begin
         run_container_shell(key)
       ensure
-        compose_down(files: files, profiles: selected_profiles(key, container: true), compose_scope: compose_scope)
+        if compose_started?(compose_scope)
+          compose_down(files: files, profiles: selected_profiles(key, container: true), compose_scope: compose_scope)
+        end
       end
     end
 

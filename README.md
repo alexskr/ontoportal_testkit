@@ -102,6 +102,14 @@ CMD ["bundle", "exec", "rake"]
 
 ## Local Development
 
+Initialize scaffold files before running docker tasks in this repo:
+
+```bash
+bundle exec rake test:testkit:init
+```
+
+If `Dockerfile` or `.ontoportal-testkit.yml` is missing, `test:docker:*` tasks will stop and remind you to run init.
+
 ```bash
 cd ontoportal_testkit
 bundle install
