@@ -296,7 +296,10 @@ namespace :test do
       files = compose_files_for(key, container: true)
       profiles = selected_profiles(key, container: true)
       compose_scope = compose_scope_name(key: key, container: true)
-      compose_up(files: files, profiles: profiles, compose_scope: compose_scope)
+      # Bring up only dependency services; the test service itself is started via
+      # `docker compose run` so we don't run duplicate test containers.
+      up_profiles = profiles.reject { |profile| profile == "container" }
+      compose_up(files: files, profiles: up_profiles, compose_scope: compose_scope)
 
       run_flags = container_run_flags(compose_scope: compose_scope)
       yield(files: files, profiles: profiles, compose_scope: compose_scope, run_flags: run_flags)
