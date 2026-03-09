@@ -28,7 +28,12 @@ unless defined?(Ontoportal::Testkit::TASKS_FILE_LOADED)
           Rake.application.add_import(task_file)
         end
 
-        Rake.application.load_imports
+        # Capistrano may expose `load_imports` as a private method on the
+        # current Rake application; invoke it through `send` for compatibility.
+        app = Rake.application
+        if app.respond_to?(:load_imports, true)
+          app.send(:load_imports)
+        end
         @tasks_loaded = true
       end
     end
