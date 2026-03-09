@@ -42,6 +42,7 @@ Component-specific dependency services (for example `mgrep`) are configured inde
 - Backend remains one of: `fs`, `ag`, `vo`, `gd`
 - Dependency services are listed in `.ontoportal-testkit.yml` under `dependency_services`
 - Service override files are loaded from `docker/compose/services/<service>.yml`
+- `test:testkit:init` scaffolds `dependency_services: [mgrep]` by default (set `DEPENDENCY_SERVICES=` to scaffold none)
 
 ## Base Image
 

@@ -18,7 +18,7 @@ namespace :test do
       workflow_path = File.join(".github", "workflows", "testkit-unit-tests.yml")
       template_root = File.join(Ontoportal::Testkit.root, "templates", "init")
 
-      dependency_services = ENV.fetch("DEPENDENCY_SERVICES", "")
+      dependency_services = ENV.fetch("DEPENDENCY_SERVICES", "mgrep")
         .split(",")
         .map(&:strip)
         .reject(&:empty?)
