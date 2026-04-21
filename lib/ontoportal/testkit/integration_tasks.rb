@@ -98,13 +98,34 @@ module Ontoportal
       end
 
       def run_component_integration!(workdir:)
-        ensure_local_testkit_gem!(File.join(workdir, "Gemfile"))
+        point_bundler_at_local_testkit!(workdir: workdir)
         run_or_abort!(%w[bundle install], chdir: workdir)
         run_testkit_task_or_abort!(task_name: "test:testkit:init[force]", chdir: workdir)
 
         integration_tasks.each do |task_name|
           run_testkit_task_or_abort!(task_name: task_name, chdir: workdir)
         end
+      end
+
+      # Force the temp component copy to use this testkit checkout instead of
+      # whatever git source its Gemfile declares. Uses Bundler's native
+      # `local.<gem>` override so we don't rewrite the Gemfile. Requires the
+      # consumer Gemfile to already declare ontoportal_testkit via a git/github
+      # source on the same branch this checkout is on.
+      def point_bundler_at_local_testkit!(workdir:)
+        gemfile = File.join(workdir, "Gemfile")
+        unless File.read(gemfile).match?(/^\s*gem\s+["']ontoportal_testkit["']/)
+          abort(
+            "Component Gemfile does not declare ontoportal_testkit. " \
+            "Add `gem 'ontoportal_testkit', github: '<org>/ontoportal_testkit', branch: '<branch>'` " \
+            "before running integration smoke: #{gemfile}"
+          )
+        end
+
+        run_or_abort!(
+          ["bundle", "config", "--local", "local.ontoportal_testkit", testkit_root],
+          chdir: workdir
+        )
       end
 
       def run_testkit_task_or_abort!(task_name:, chdir:)
@@ -127,23 +148,6 @@ module Ontoportal
           chdir: chdir,
           env: {"OPTK_TASK" => task_name}
         )
-      end
-
-      def ensure_local_testkit_gem!(gemfile_path)
-        content = File.read(gemfile_path)
-        local_decl = %(gem "ontoportal_testkit", path: "#{testkit_root}")
-
-        if content.match?(/^\s*gem\s+["']ontoportal_testkit["'].*$/)
-          updated = content.gsub(/^\s*gem\s+["']ontoportal_testkit["'].*$/, local_decl)
-          File.write(gemfile_path, updated)
-          return
-        end
-
-        File.open(gemfile_path, "a") do |f|
-          f.puts
-          f.puts "# Added by ontoportal_testkit integration smoke task"
-          f.puts local_decl
-        end
       end
 
       def run_or_abort!(cmd, chdir:, env: {})
