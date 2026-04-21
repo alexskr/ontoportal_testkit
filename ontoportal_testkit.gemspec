@@ -14,7 +14,6 @@ Gem::Specification.new do |spec|
     "Rakefile",
     ".ontoportal-testkit.example.yml",
     ".ontoportal-testkit.integration.yml",
-    "Dockerfile",
     "docker/**/*",
     "lib/**/*.rb",
     "rakelib/**/*.rake",
