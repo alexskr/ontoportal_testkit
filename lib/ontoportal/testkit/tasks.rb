@@ -17,8 +17,6 @@ unless defined?(Ontoportal::Testkit::TASKS_FILE_LOADED)
       ].freeze
 
       def self.load_tasks!
-        return if defined?(@tasks_loaded) && @tasks_loaded
-
         # Rake does not auto-load task files from gem-internal rakelib.
         # We import selected task files explicitly into the consumer's Rake app.
         COMPONENT_TASK_FILES.each do |file_name|
@@ -31,10 +29,7 @@ unless defined?(Ontoportal::Testkit::TASKS_FILE_LOADED)
         # Capistrano may expose `load_imports` as a private method on the
         # current Rake application; invoke it through `send` for compatibility.
         app = Rake.application
-        if app.respond_to?(:load_imports, true)
-          app.send(:load_imports)
-        end
-        @tasks_loaded = true
+        app.send(:load_imports) if app.respond_to?(:load_imports, true)
       end
     end
   end
