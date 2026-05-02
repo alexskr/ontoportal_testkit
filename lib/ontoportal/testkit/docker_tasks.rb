@@ -1,3 +1,4 @@
+require "fileutils"
 require "rbconfig"
 require "shellwords"
 require_relative "component_config"
@@ -350,6 +351,9 @@ module Ontoportal
       end
 
       def run_container_tests(key)
+        # Pre-create the host coverage dir so the bind mount in base.yml lands on
+        # a user-owned dir instead of one docker creates as root.
+        FileUtils.mkdir_p("coverage")
         with_container_stack(key) do |files:, profiles:, compose_scope:, run_flags:|
           shell!(
             "#{compose_base(files, compose_scope: compose_scope)} #{profile_flags(profiles)} " \
