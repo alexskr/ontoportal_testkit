@@ -57,6 +57,8 @@ Rake does not auto-discover task files inside a gem's `rakelib/`, so `tasks.rb` 
 - `services/<name>.yml` — one per entry in `dependency_services` (e.g. `mgrep.yml`). Independent of backend choice.
 - `runtime/no-ports.yml` + `runtime/no-ports-<service>.yml` — only in `:container` mode; strips host port bindings so parallel backend runs don't collide.
 
+Compose **concatenates** sequence-valued keys across `-f` files rather than replacing them — this affects `ports`, `expose`, `external_links`, `dns`, `dns_search`, and `tmpfs`. An override that wants to *remove* one of those must tag it (`ports: !override []`, or `!reset` to drop the key entirely); a bare `ports: []` merges into the base list and silently does nothing. That was the bug in `runtime/no-ports*.yml`: the files existed and were passed to compose, but host ports stayed bound. `!override` needs Compose v2.24.0+ (see README requirements). Verify any change here with `docker compose -f ... config` and confirm no `published:` entries survive — nothing in CI binds these ports, so a regression only surfaces on a dev machine running two components at once.
+
 Profile selection mirrors this: `selected_profiles(key, container:)` returns `[backend, "container"?, *dependency_services]`.
 
 ### Compose project scoping

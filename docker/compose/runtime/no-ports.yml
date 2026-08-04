@@ -1,13 +1,20 @@
+# Strips host port bindings from backing services in :container mode, so parallel
+# runs (different backends, different components) don't collide on host ports.
+# Services still reach each other by name over the compose network.
+#
+# The `!override` tag is required: compose *concatenates* `ports` across `-f`
+# files, so a bare `ports: []` merges into base.yml's list and is a silent no-op.
+# Requires Docker Compose v2.24.0+.
 services:
   redis-ut:
-    ports: []
+    ports: !override []
   solr-ut:
-    ports: []
+    ports: !override []
   agraph-ut:
-    ports: []
+    ports: !override []
   4store-ut:
-    ports: []
+    ports: !override []
   virtuoso-ut:
-    ports: []
+    ports: !override []
   graphdb-ut:
-    ports: []
+    ports: !override []

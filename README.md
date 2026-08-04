@@ -10,6 +10,12 @@ This toolkit is intended to reduce copy/paste across related repos by packaging 
 - Shared backend profile conventions (`fs`, `ag`, `vo`, `gd`)
 - Per-component overrides via `.ontoportal-testkit.yml`
 
+## Requirements
+
+- Docker Compose **v2.24.0 or newer**. The `runtime/no-ports*.yml` overrides use the
+  `!override` merge tag, which older versions do not understand — `test:docker:*:container`
+  runs will fail with a YAML parse error on those files.
+
 ## Planned Usage
 
 In consumer components (`goo`, `ontologies_linked_data`, `ncbo_annotator`, `ncbo_recommender`, `ncbo_cron`, `ontologies_api`):

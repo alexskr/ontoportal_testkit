@@ -1,3 +1,5 @@
+# Companion to no-ports.yml for the optional mgrep dependency service.
+# See no-ports.yml for why `!override` is required rather than a bare `ports: []`.
 services:
   mgrep-ut:
-    ports: []
+    ports: !override []
