@@ -1,3 +1,4 @@
+require "ontoportal/testkit/compose_contract"
 require "ontoportal/testkit/integration_tasks"
 
 namespace :test do
@@ -20,6 +21,11 @@ namespace :test do
       desc "Run integration smoke for all components listed in .ontoportal-testkit.integration.yml components"
       task :configured do
         runner.configured
+      end
+
+      desc "Verify the packaged compose files publish the expected host ports (docker compose config only; creates nothing)"
+      task :compose_ports do
+        Ontoportal::Testkit::ComposeContract.new.run
       end
     end
   end

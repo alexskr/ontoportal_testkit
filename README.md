@@ -145,6 +145,63 @@ Dev aliases enable `OPTK_TEST_DOCKER_CONTAINER_DEV_MODE=1`, which implies:
 
 You can also set these flags independently if you only want part of the behavior.
 
+### Host Port Conflicts
+
+Host-Ruby tasks (`test:docker:fs`, `test:docker:up[fs]`, …) publish backend ports on the host so
+your local Ruby can reach them. Running two OntoPortal components at once therefore collides:
+
+| Task | Host ports published |
+| --- | --- |
+| `test:docker:fs` / `up[fs]` | 6379, 8983, 9000 |
+| `test:docker:ag` / `up[ag]` | 6379, 8983, 10035 |
+| `test:docker:vo` / `up[vo]` | 1111, 6379, 8890, 8983 |
+| `test:docker:gd` / `up[gd]` | 6379, 7200, 7300, 8983 |
+| `test:docker:up:all` | all eight of the above |
+| `mgrep` dependency service | adds 55556 |
+
+`compose_up` checks those ports before starting anything and aborts naming the container and
+compose project holding each one, rather than letting compose fail with a bare bind error:
+
+```
+Host port conflict(s) detected before `docker compose up` (project ontologies_linked_data-fs):
+
+  8983   held by container goo-fs-solr-ut-1 (compose project: goo-fs, service: solr-ut)
+
+Free those ports, or stop the other stack(s):
+  docker compose -p goo-fs down
+```
+
+Ports held by your own component's already-running stack are not treated as conflicts, so
+`up[fs]` followed by `test:docker:fs` works as expected.
+
+**Container-mode tasks publish nothing on the host and are the recommended way to run two
+components at the same time:**
+
+```bash
+bundle exec rake test:docker:fs:container
+```
+
+Two escape hatches, both off by default:
+
+- `OPTK_TEST_DOCKER_SKIP_PORT_CHECKS=1` — skip the preflight *and* the post-`up` verification.
+  `docker compose up` will then fail on bind instead.
+- `OPTK_TEST_DOCKER_FORCE_RECREATE=1` — always pass `--force-recreate`. Costly for GraphDB and
+  AllegroGraph, which re-initialize from scratch on every recreate.
+
+#### Why the checks exist
+
+[moby/moby#51758](https://github.com/moby/moby/issues/51758) (unfixed as of Docker Engine 29.x): a
+container whose first start fails on a port conflict loses its network config, and every later
+start attaches no networking at all. Because the backend healthchecks in `base.yml` are
+container-local, `docker compose up --wait` then reports the stack **healthy while nothing is
+reachable from the host**. Two guards keep that state unreachable:
+
+- A failed `up` tears down the containers it partially created, so none survive to be resurrected.
+  Set `OPTK_KEEP_CONTAINERS=1` to keep them for inspection instead — the warning prints the
+  `docker compose -p <project> down` needed to clear them.
+- After a successful `up`, the ports that were supposed to be published are verified against
+  `docker compose ps`. A mismatch triggers exactly one `--force-recreate` retry, then aborts.
+
 ## Integration Smoke Test Against a Real Component
 
 These integration smoke tasks are maintainer-focused for the `ontoportal_testkit` repo.
@@ -185,6 +242,20 @@ Or run all components listed in `.ontoportal-testkit.integration.yml`:
 ```bash
 bundle exec rake test:testkit:integration:configured
 ```
+
+### Compose Port Contract Check
+
+Verifies the packaged compose files publish exactly the expected host ports for every backend in
+both modes — in particular that `:container` mode publishes **nothing**, which is what keeps
+parallel runs from colliding:
+
+```bash
+bundle exec rake test:testkit:integration:compose_ports
+```
+
+Pure `docker compose config`: creates no containers, binds no ports, pulls no images, and needs no
+scaffold files, so it is safe to run anywhere docker is installed. It also catches drift between
+`base.yml` and the `BACKENDS` matrix in `docker_tasks.rb`.
 
 Config example:
 

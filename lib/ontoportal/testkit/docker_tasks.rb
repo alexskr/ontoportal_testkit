@@ -1,6 +1,9 @@
 require "fileutils"
+require "json"
+require "open3"
 require "rbconfig"
 require "shellwords"
+require "socket"
 require_relative "component_config"
 
 module Ontoportal
@@ -160,6 +163,27 @@ module Ontoportal
         end
       end
 
+      # Host ports the given stack selection would publish, sorted and deduped.
+      #
+      # Public so the maintainer-only compose contract check exercises the same
+      # derivation the port preflight uses, rather than a parallel
+      # reimplementation that could drift from it.
+      def published_ports_for(key: nil, container: false, all_backends: false)
+        profiles = if all_backends
+          all_backend_profiles(container: container)
+        else
+          selected_profiles(key, container: container)
+        end
+
+        # `config` resolves files without touching the daemon, so the project
+        # name is irrelevant here — nothing is created under it.
+        configured_port_bindings(
+          files: compose_files_for(key, container: container),
+          profiles: profiles,
+          compose_scope: "optk-probe"
+        ).map { |binding| binding[:port] }.uniq.sort
+      end
+
       private
 
       def down_backend(key)
@@ -197,9 +221,48 @@ module Ontoportal
         end
       end
 
-      def shell!(cmd)
+      def shell?(cmd)
         puts "Running: #{cmd}"
-        system(cmd) || abort_with("Command failed: #{cmd}")
+        system(cmd) ? true : false
+      end
+
+      def shell!(cmd)
+        shell?(cmd) || abort_with("Command failed: #{cmd}")
+      end
+
+      # Combined stdout+stderr plus success, without echoing — these run on every
+      # `up` and shouldn't spam the log. String form is required: compose_base
+      # prefixes `OPTK_TESTKIT_ROOT=...` as a shell assignment, and base.yml
+      # declares `${OPTK_TESTKIT_ROOT:?...}`.
+      #
+      # No `capture!` counterpart: every caller here wants its own failure policy
+      # (abort with the captured output for `config`, fail open for `ps`).
+      def capture(cmd)
+        out, status = Open3.capture2e(cmd)
+        [out, status.success?]
+      end
+
+      def keep_containers?
+        env_true?("OPTK_KEEP_CONTAINERS")
+      end
+
+      def skip_port_checks?
+        env_true?("OPTK_TEST_DOCKER_SKIP_PORT_CHECKS")
+      end
+
+      # `docker compose ps --format json` emits NDJSON on v2.21+ and a JSON array
+      # before that. Accept either, and never raise — callers fail open.
+      def parse_compose_json_stream(raw)
+        text = raw.to_s.strip
+        return [] if text.empty?
+        return Array(JSON.parse(text)) if text.start_with?("[")
+
+        text.each_line.filter_map do |line|
+          stripped = line.strip
+          stripped.empty? ? nil : JSON.parse(stripped)
+        end
+      rescue JSON::ParserError
+        []
       end
 
       def cfg!(key)
@@ -315,17 +378,259 @@ module Ontoportal
         configured
       end
 
+      # Every task that brings containers up funnels through here, so the host
+      # port guards live here rather than at the call sites. That is also what
+      # makes them correct for with_container_stack, which passes a narrowed
+      # profile list — deriving the port set from the `profiles:` argument is
+      # automatically right, where deriving it at the call site would not be.
       def compose_up(files:, profiles:, compose_scope:)
         ensure_testkit_initialized!
-        shell!("#{compose_base(files, compose_scope: compose_scope)} #{profile_flags(profiles)} up -d --wait --wait-timeout #{timeout}")
-        mark_compose_started!(compose_scope)
+        bindings = configured_port_bindings(files: files, profiles: profiles, compose_scope: compose_scope)
+        ensure_host_ports_available!(bindings, compose_scope: compose_scope)
+        expected = bindings.map { |binding| binding[:port] }.uniq.sort
+
+        compose_up_attempt!(
+          files: files,
+          profiles: profiles,
+          compose_scope: compose_scope,
+          force_recreate: env_true?("OPTK_TEST_DOCKER_FORCE_RECREATE")
+        )
+
+        missing = missing_published_ports(compose_scope: compose_scope, expected: expected)
+        return if missing.empty?
+
+        warn(
+          "Project #{compose_scope} reported healthy but host port(s) #{missing.join(", ")} are not " \
+          "published (expected #{expected.join(", ")}). Recreating containers to clear stale " \
+          "bindings — see moby/moby#51758."
+        )
+        compose_up_attempt!(files: files, profiles: profiles, compose_scope: compose_scope, force_recreate: true)
+
+        still_missing = missing_published_ports(compose_scope: compose_scope, expected: expected)
+        return if still_missing.empty?
+
+        abort_with(stale_bindings_message(compose_scope: compose_scope, expected: expected, missing: still_missing))
       end
 
-      def compose_down(files:, compose_scope:, profiles: [])
-        return puts("OPTK_KEEP_CONTAINERS=1 set, skipping docker compose down") if ENV["OPTK_KEEP_CONTAINERS"] == "1"
+      def compose_up_attempt!(files:, profiles:, compose_scope:, force_recreate:)
+        up_flags = ["up", "-d", "--wait", "--wait-timeout", timeout.to_s]
+        up_flags << "--force-recreate" if force_recreate
+        cmd = [
+          compose_base(files, compose_scope: compose_scope),
+          profile_flags(profiles),
+          up_flags.join(" ")
+        ].reject(&:empty?).join(" ")
+
+        return mark_compose_started!(compose_scope) if shell?(cmd)
+
+        # The started flag stays unset on purpose: abort_with raises SystemExit,
+        # so with_backend_compose's ensure runs, sees false, and skips a second
+        # teardown. Cleanup already happened here.
+        cleanup_failed_compose_up!(files: files, profiles: profiles, compose_scope: compose_scope)
+        abort_with("docker compose up failed for project #{compose_scope}.")
+      end
+
+      # A failed `up` leaves containers in `created` state. Docker Engine
+      # resurrects those with no networking attached at all on the next start
+      # (moby/moby#51758, unfixed as of Engine 29.x), yielding a stack that passes
+      # container-local healthchecks while publishing nothing on the host. So they
+      # must not survive the failure that created them.
+      def cleanup_failed_compose_up!(files:, profiles:, compose_scope:)
+        if keep_containers?
+          warn(
+            "OPTK_KEEP_CONTAINERS=1: leaving partially created containers for project " \
+            "#{compose_scope} in place. A later run may reuse them with stale port bindings " \
+            "(moby/moby#51758). Clear them with: docker compose -p #{compose_scope} down"
+          )
+          return
+        end
+
+        puts "Removing partially created containers for project #{compose_scope}"
+        # Non-strict: a cleanup failure must not mask the original `up` failure.
+        compose_down(files: files, profiles: profiles, compose_scope: compose_scope, strict: false)
+      end
+
+      def compose_down(files:, compose_scope:, profiles: [], strict: true)
+        return puts("OPTK_KEEP_CONTAINERS=1 set, skipping docker compose down") if keep_containers?
 
         cmd = [compose_base(files, compose_scope: compose_scope), profile_flags(profiles), "down"].reject(&:empty?).join(" ")
-        shell!(cmd)
+        strict ? shell!(cmd) : shell?(cmd)
+      end
+
+      # Resolved host port bindings for a compose selection, straight from
+      # `docker compose config`. base.yml stays the single source of truth, and
+      # :container mode yields [] for free because runtime/no-ports*.yml strip
+      # every `ports` entry — so the guards below are inert there by construction.
+      def configured_port_bindings(files:, profiles:, compose_scope:)
+        cmd = [
+          compose_base(files, compose_scope: compose_scope),
+          profile_flags(profiles),
+          "config --format json"
+        ].reject(&:empty?).join(" ")
+
+        out, ok = capture(cmd)
+        # Not a false positive worth tolerating: `up` would fail on the same input.
+        abort_with("Could not resolve compose config for project #{compose_scope}:\n#{out}") unless ok
+
+        parsed = parse_compose_config(out, compose_scope: compose_scope)
+        services = parsed.is_a?(Hash) ? parsed["services"] : nil
+        return [] unless services.is_a?(Hash)
+
+        services.flat_map do |service_name, service|
+          ports = service.is_a?(Hash) ? service["ports"] : nil
+          Array(ports).filter_map do |port|
+            next unless port.is_a?(Hash)
+
+            published = port["published"].to_s[/\d+/]
+            next unless published
+
+            {port: published.to_i, host_ip: port["host_ip"].to_s, service: service_name}
+          end
+        end
+      end
+
+      def parse_compose_config(raw, compose_scope:)
+        JSON.parse(raw.to_s)
+      rescue JSON::ParserError => e
+        abort_with("Could not parse compose config JSON for project #{compose_scope}: #{e.message}")
+      end
+
+      # Aborts when a host port the stack is about to publish is already taken.
+      # Without this, the conflict surfaces as a bare compose bind error naming no
+      # culprit — and on Engine 29.x it can leave containers that later come up
+      # healthy but unreachable (moby/moby#51758).
+      def ensure_host_ports_available!(bindings, compose_scope:)
+        return if bindings.empty? || skip_port_checks?
+
+        conflicts = bindings.uniq { |binding| binding[:port] }.filter_map do |binding|
+          next unless host_port_taken?(binding)
+
+          holder = docker_port_holder(binding[:port])
+          # Our own already-running stack is not a conflict: `up[fs]` followed by
+          # `test:docker:fs` is a legitimate sequence, and up/up:all deliberately
+          # leave stacks running.
+          next if holder && holder[:project] == compose_scope
+
+          {port: binding[:port], service: binding[:service], holder: holder}
+        end
+        return if conflicts.empty?
+
+        abort_with(port_conflict_message(conflicts, compose_scope: compose_scope))
+      end
+
+      def host_port_taken?(binding)
+        probe_hosts(binding[:host_ip]).any? { |host| port_bind_fails?(host, binding[:port]) }
+      end
+
+      # base.yml publishes without a host_ip, and docker then binds both 0.0.0.0
+      # and [::] — so probe both. An explicit host_ip is honored if one ever appears.
+      def probe_hosts(host_ip)
+        ip = host_ip.to_s.strip
+        return [ip] unless ip.empty? || ip == "0.0.0.0" || ip == "::"
+
+        ["0.0.0.0", "::"]
+      end
+
+      # Only EADDRINUSE counts as a conflict. IPv6 being unavailable
+      # (EAFNOSUPPORT/EADDRNOTAVAIL) or a sandboxed bind (EACCES/EPERM) means
+      # "unknown" — allow it through. A false positive blocks a legitimate run; a
+      # false negative merely defers to compose, which now cleans up after itself.
+      #
+      # TCPServer sets SO_REUSEADDR, so a port in TIME_WAIT does not false-positive.
+      def port_bind_fails?(host, port)
+        server = TCPServer.new(host, port)
+        false
+      rescue Errno::EADDRINUSE
+        true
+      rescue SystemCallError
+        false
+      ensure
+        server&.close
+      end
+
+      # Attribution only, and best effort. `--filter publish=` matches live
+      # bindings, so nil just means "not a running docker container" — which is
+      # still worth reporting, as a non-docker holder. Never let a docker failure
+      # here block a run.
+      def docker_port_holder(port)
+        template = '{{.Names}}|{{.Label "com.docker.compose.project"}}|{{.Label "com.docker.compose.service"}}'
+        out, ok = capture("docker ps --filter publish=#{port} --format #{Shellwords.escape(template)}")
+        return nil unless ok
+
+        line = out.lines.map(&:strip).reject(&:empty?).first
+        return nil unless line
+
+        name, project, service = line.split("|", 3)
+        {name: name.to_s, project: project.to_s, service: service.to_s}
+      end
+
+      def port_conflict_message(conflicts, compose_scope:)
+        lines = ["Host port conflict(s) detected before `docker compose up` (project #{compose_scope}):", ""]
+        conflicts.each { |conflict| lines << port_conflict_line(conflict) }
+
+        projects = conflicts.filter_map { |conflict| conflict[:holder]&.fetch(:project) }.reject(&:empty?).uniq
+        lines << ""
+        if projects.empty?
+          lines << "Free those ports, then retry."
+        else
+          lines << "Free those ports, or stop the other stack(s):"
+          projects.each { |project| lines << "  docker compose -p #{project} down" }
+        end
+
+        lines << ""
+        lines << "Container-mode tasks publish no host ports and are unaffected:"
+        lines << "  bundle exec rake test:docker:#{default_backend}:container"
+        lines << ""
+        lines << "Override with OPTK_TEST_DOCKER_SKIP_PORT_CHECKS=1 (compose up will then fail on bind)."
+        lines.join("\n")
+      end
+
+      def port_conflict_line(conflict)
+        holder = conflict[:holder]
+        return format("  %-6s held by a process outside docker", conflict[:port]) if holder.nil? || holder[:name].empty?
+
+        details = ["compose project: #{holder[:project].empty? ? "none" : holder[:project]}"]
+        details << "service: #{holder[:service]}" unless holder[:service].empty?
+        format("  %-6s held by container %s (%s)", conflict[:port], holder[:name], details.join(", "))
+      end
+
+      # Expected host ports that are not actually published after `up`.
+      #
+      # Fails open at every step — a bug here would silently force-recreate on
+      # every run, doubling the cost of stacks like GraphDB that re-initialize
+      # from scratch. Compares "missing", never "extra", so adding a service to
+      # base.yml cannot false-positive.
+      def missing_published_ports(compose_scope:, expected:)
+        return [] if expected.empty? || skip_port_checks?
+
+        out, ok = capture("docker compose -p #{Shellwords.escape(compose_scope)} ps --format json")
+        return [] unless ok
+
+        containers = parse_compose_json_stream(out)
+        return [] if containers.empty?
+
+        actual = containers
+          .flat_map { |container| Array(container["Publishers"]) }
+          .filter_map { |publisher| publisher["PublishedPort"].to_i.nonzero? if publisher.is_a?(Hash) }
+          .uniq
+        expected - actual
+      end
+
+      def stale_bindings_message(compose_scope:, expected:, missing:)
+        <<~MESSAGE
+          Project #{compose_scope} came up but host port(s) #{missing.join(", ")} are still not
+          published (expected #{expected.join(", ")}) even after --force-recreate.
+
+          This is the signature of moby/moby#51758: a container whose first start failed on a
+          port conflict loses its network config, and every later start attaches no networking
+          at all. Container-local healthchecks still pass, so compose reports the stack healthy
+          while nothing is reachable from the host.
+
+          Clear the project and retry:
+            docker compose -p #{compose_scope} down
+
+          Skip this check with OPTK_TEST_DOCKER_SKIP_PORT_CHECKS=1.
+        MESSAGE
       end
 
       def mark_compose_started!(compose_scope)
